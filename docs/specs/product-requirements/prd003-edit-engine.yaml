@@ -1,0 +1,63 @@
+id: prd003-edit-engine
+title: Text Edit Engine
+problem: |
+  Not all files in a repository are Go source. YAML configs, markdown docs,
+  shell scripts, and other text files also need editing. The AST engine
+  handles Go files, but we need a text-based search/replace engine for
+  everything else. This engine must handle imprecise matches from the LLM
+  (minor whitespace differences, indentation variations) without corrupting
+  files.
+goals:
+  - G1: Apply text-based search/replace edits to any text file
+  - G2: Handle imprecise LLM output through multi-stage matching
+  - G3: Produce diagnostics when matches fail
+  - G4: Support file creation and whole-file replacement
+requirements:
+  R1:
+    title: Search/Replace Operations
+    items:
+      - R1.1: Apply must take a file path, search text, and replacement text, and perform the substitution
+      - R1.2: Apply must replace only the first occurrence when multiple matches exist
+      - R1.3: ApplyAll must replace all occurrences of the search text
+      - R1.4: Apply must return an error if no match is found after all matching stages
+      - R1.5: Apply must write the result atomically (temp file + rename)
+  R2:
+    title: Multi-Stage Matching
+    items:
+      - R2.1: Stage 1 (exact) must match the search text byte-for-byte
+      - R2.2: Stage 2 (whitespace-normalized) must collapse runs of whitespace and trim lines before matching
+      - R2.3: Stage 3 (fuzzy) must use sequence matching with a configurable similarity threshold (default 0.8)
+      - R2.4: Stages must be tried in order; the first successful match wins
+      - R2.5: The matching stage used must be recorded in the result for diagnostics
+  R3:
+    title: Diagnostics
+    items:
+      - R3.1: When all stages fail, the engine must report what search text was expected
+      - R3.2: The diagnostic must include the closest partial match found (if any) with its similarity score
+      - R3.3: The diagnostic must include the file path and the line range of the closest match
+      - R3.4: Diagnostics must be structured (not free text) so the feedback loop can format them for the LLM
+  R4:
+    title: File Operations
+    items:
+      - R4.1: CreateFile must create a new file with the given content
+      - R4.2: CreateFile must return an error if the file already exists (no silent overwrite)
+      - R4.3: ReplaceFile must overwrite an existing file with new content
+      - R4.4: DeleteFile must remove a file from disk
+      - R4.5: All file operations must use atomic writes where applicable
+  R5:
+    title: Integration with Edit Router
+    items:
+      - R5.1: The edit engine must implement an Applier interface with Apply(edit Edit) (*ApplyResult, error)
+      - R5.2: The Applier interface must be the same one the AST engine implements for Go files
+      - R5.3: The edit router selects the engine based on file extension (.go uses AST engine, everything else uses text engine)
+non_goals:
+  - This PRD does not define binary file editing
+  - This PRD does not define syntax-aware editing for non-Go languages (that would require per-language parsers)
+  - This PRD does not define the edit format parser (that is prd004)
+acceptance_criteria:
+  - Exact match applies correctly on a test file
+  - Whitespace-normalized match handles indentation differences
+  - Fuzzy match catches minor LLM variations (e.g., extra spaces, missing trailing newline)
+  - Failed matches produce structured diagnostics with closest match info
+  - File creation, replacement, and deletion work atomically
+  - Both engines implement the same Applier interface

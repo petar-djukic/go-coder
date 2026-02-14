@@ -1,0 +1,71 @@
+id: prd007-feedback-loop
+title: Compiler and Test Feedback Loop
+
+problem: |
+  LLMs do not always produce correct code on the first attempt. After applying
+  edits, we need to verify correctness by running the Go compiler and test
+  suite. When errors occur, we format them into a follow-up prompt so the LLM
+  can fix its mistakes. This compile-test-retry loop is the mechanism that
+  turns approximate LLM output into working code.
+
+goals:
+  - G1: Run go build and go vet after edits to detect compilation errors
+  - G2: Run a configurable test command to detect test failures
+  - G3: Format errors into structured follow-up prompts for the LLM
+  - G4: Retry the generate-apply-verify cycle up to a configurable limit
+
+requirements:
+  R1:
+    title: Compiler Verification
+    items:
+      - R1.1: The verifier must run "go build ./..." in the working directory after edits are applied
+      - R1.2: The verifier must run "go vet ./..." after a successful build
+      - R1.3: Both commands must capture stdout and stderr
+      - R1.4: The verifier must parse compiler error output to extract file paths, line numbers, and error messages
+      - R1.5: The verifier must have a configurable timeout per command (default 60 seconds)
+      - R1.6: If go build fails, go vet must be skipped (no point vetting code that does not compile)
+  R2:
+    title: Test Verification
+    items:
+      - R2.1: The verifier must run the test command from Config.TestCmd if it is not empty
+      - R2.2: The test command must be run only after go build and go vet succeed
+      - R2.3: Test output (stdout and stderr) must be captured
+      - R2.4: Test failures must be detected by non-zero exit code
+      - R2.5: The verifier must have a configurable timeout for the test command (default 120 seconds)
+      - R2.6: If TestCmd is empty, the test step must be skipped entirely
+  R3:
+    title: Error Formatting
+    items:
+      - "R3.1: Compiler errors must be formatted as a structured message showing: file path, line number, error text, and the surrounding code context (5 lines above and below the error line)"
+      - R3.2: Test failures must include the full test output (stdout + stderr), truncated to a configurable maximum (default 4096 characters)
+      - R3.3: The formatted error message must include a preamble instructing the LLM to fix the errors using the same edit format
+      - R3.4: The error message must list which files were modified in the previous attempt so the LLM has context
+      - R3.5: When multiple errors exist, all errors must be included in a single message (not one per error)
+  R4:
+    title: Retry Logic
+    items:
+      - "R4.1: The retry loop must alternate between: send error prompt to LLM -> parse edits -> apply edits -> verify"
+      - R4.2: The retry count must be bounded by Config.MaxRetries (default 3)
+      - R4.3: Each retry must include the previous error output and the LLM's previous response in the message history
+      - R4.4: If all retries are exhausted, Run must return a Result with Success=false and the remaining errors in Result.Errors
+      - R4.5: If verification succeeds at any point, the loop must exit immediately with Success=true
+      - R4.6: Context cancellation must be checked before each retry iteration
+  R5:
+    title: Verification Result
+    items:
+      - "R5.1: The VerifyResult struct must include: BuildOK (bool), VetOK (bool), TestOK (bool), Errors ([]CompileError), TestOutput (string)"
+      - "R5.2: CompileError must include: FilePath (string), Line (int), Column (int), Message (string)"
+      - R5.3: VerifyResult.Success() must return true only when BuildOK, VetOK, and (TestOK or no test command configured)
+
+non_goals:
+  - This PRD does not define linting beyond go vet (no golangci-lint integration)
+  - This PRD does not define incremental compilation (we run go build on the full module each time)
+  - This PRD does not define test selection (we run the full test command, not targeted tests)
+
+acceptance_criteria:
+  - go build errors are detected, parsed into CompileError structs, and formatted with code context
+  - go vet warnings are captured and included in error output
+  - Test failures are detected and output is captured (truncated if too long)
+  - Error formatting produces a message suitable for the LLM feedback loop
+  - Retry loop stops on success or after MaxRetries
+  - Context cancellation terminates the loop promptly

@@ -1,0 +1,176 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: test-rel05.0-uc001-build-repo-map
+title: Repository map construction and ranking
+description: >
+  Validates the repository map pipeline from symbol extraction through graph
+  construction, PageRank ranking, and rendering. Test cases cover symbol
+  extraction, cross-file edge creation, personalized ranking, token budget
+  enforcement, cache behavior, and unsupported file type handling.
+traces:
+  - rel05.0-uc001-build-repo-map
+tags:
+  - repomap
+  - ranking
+  - integration
+
+preconditions:
+  - A multi-file Go repository with cross-package references exists in a temporary directory
+  - The repository contains at least two packages that import each other
+  - Tree-sitter grammars for Go are available
+
+test_cases:
+  - name: Symbol extraction finds definitions
+    description: >
+      Given a Go package with exported functions and types, tree-sitter
+      extracts symbol definitions including function names, type names,
+      and method signatures.
+    inputs:
+      files:
+        - path: pkg/math/math.go
+          content: |
+            package math
+
+            type Calculator struct{}
+
+            func (c *Calculator) Add(a, b int) int { return a + b }
+
+            func Multiply(a, b int) int { return a * b }
+        - path: pkg/util/format.go
+          content: |
+            package util
+
+            func FormatNumber(n int) string { return "" }
+      command: extract-symbols --work-dir .
+    expected:
+      exit_code: 0
+      state:
+        symbol_count_gte: 4
+        symbols_contain:
+          - name: Calculator
+            kind: type
+          - name: Add
+            kind: method
+          - name: Multiply
+            kind: function
+          - name: FormatNumber
+            kind: function
+
+  - name: Graph has cross-file edges
+    description: >
+      When one package imports and references symbols from another package,
+      the dependency graph contains directed edges from the referencing
+      file to the defining file.
+    inputs:
+      files:
+        - path: pkg/math/math.go
+          content: |
+            package math
+
+            func Add(a, b int) int { return a + b }
+        - path: cmd/main.go
+          content: |
+            package main
+
+            import "example/pkg/math"
+
+            func main() { math.Add(1, 2) }
+      command: build-graph --work-dir .
+    expected:
+      exit_code: 0
+      state:
+        edge_count_gte: 1
+        edges_contain:
+          - from: cmd/main.go
+            to: pkg/math/math.go
+            reference: Add
+
+  - name: PageRank biases toward personalized files
+    description: >
+      When personalization weights are set on task-relevant files, those
+      files receive higher PageRank scores than files with no personalization.
+    inputs:
+      files:
+        - path: pkg/math/math.go
+          content: |
+            package math
+
+            func Add(a, b int) int { return a + b }
+        - path: pkg/util/format.go
+          content: |
+            package util
+
+            func FormatNumber(n int) string { return "" }
+        - path: cmd/main.go
+          content: |
+            package main
+
+            import "example/pkg/math"
+            import "example/pkg/util"
+
+            func main() {
+                math.Add(1, 2)
+                util.FormatNumber(42)
+            }
+      personalized_files:
+        - pkg/math/math.go
+      command: rank --work-dir . --personalize pkg/math/math.go
+    expected:
+      exit_code: 0
+      state:
+        rank_order:
+          - pkg/math/math.go
+          - cmd/main.go
+
+  - name: Map fits within token budget
+    description: >
+      When a token budget is specified, the rendered map contains only
+      enough symbols to stay within that budget. Lower-ranked symbols
+      are excluded.
+    inputs:
+      token_budget: 100
+      command: render --work-dir . --budget 100
+    expected:
+      exit_code: 0
+      state:
+        token_count_lte: 100
+        map_not_empty: true
+
+  - name: Cache skips unchanged files
+    description: >
+      After an initial extraction, running extraction again without
+      modifying any files results in a cache hit. The symbol table is
+      returned from cache without re-parsing.
+    inputs:
+      command: extract-symbols --work-dir .
+      run_twice: true
+    expected:
+      exit_code: 0
+      state:
+        cache_hit: true
+        parse_count_second_run: 0
+
+  - name: Unsupported file types skipped
+    description: >
+      Files with unsupported extensions (e.g., .png, .bin) are skipped
+      during symbol extraction without producing errors.
+    inputs:
+      files:
+        - path: pkg/math/math.go
+          content: |
+            package math
+
+            func Add(a, b int) int { return a + b }
+        - path: assets/logo.png
+          content: "<binary data>"
+      command: extract-symbols --work-dir .
+    expected:
+      exit_code: 0
+      state:
+        files_processed: 1
+        files_skipped: 1
+        errors: []
+
+cleanup:
+  - Remove the temporary directory and all test files

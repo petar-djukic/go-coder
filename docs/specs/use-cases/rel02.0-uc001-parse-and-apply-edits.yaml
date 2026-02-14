@@ -1,0 +1,52 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: rel02.0-uc001-parse-and-apply-edits
+title: Parse LLM Response and Apply Edits
+summary: |
+  The edit format parser extracts search/replace blocks from an LLM
+  response. The edit router sends Go file edits to the AST engine and
+  non-Go file edits to the text editor. Multi-stage matching handles
+  imprecise LLM output.
+actor: The coder orchestrator processing an LLM response
+trigger: LLM response text containing search/replace blocks is received
+flow:
+  - F1: "Parse the LLM response to extract search/replace blocks (file path, search text, replacement text)"
+  - F2: "Separate reasoning text from edit blocks"
+  - F3: "Route each edit by file extension (.go to AST engine, others to text editor)"
+  - F4: "For Go files, apply via AST mutation (ReplaceFunctionBody or text fallback)"
+  - F5: "For non-Go files, apply via multi-stage text matching (exact, whitespace-normalized, fuzzy)"
+  - F6: "Collect results and errors from all edits"
+  - F7: "Report any malformed blocks as ParseErrors"
+touchpoints:
+  - T1: "internal/editformat parser: Parse, ParseError, NoEditsFound (prd004-edit-format R1, R4, R5)"
+  - T2: "internal/editor text Apply: multi-stage matching (prd003-edit-engine R1, R2)"
+  - T3: "internal/ast AST applier: ReplaceFunctionBody (prd002-ast-engine R3)"
+  - T4: "pkg/types Edit struct: FilePath, OldContent, NewContent, IsCreate (prd001-coder-interface R5)"
+success_criteria:
+  - S1: Parser extracts multiple search/replace blocks from a sample response
+  - S2: Go file edits are routed to the AST engine
+  - S3: Non-Go file edits are routed to the text editor
+  - S4: Whitespace-normalized matching handles minor indentation differences
+  - S5: Malformed blocks produce ParseError with position and raw text
+  - S6: Empty response produces NoEditsFound error
+out_of_scope:
+  - LLM interaction and prompt construction (see prd005-llm-client)
+  - Feedback loop and retry logic (see prd007-feedback-loop)
+  - Git commit after edits (see prd008-git-integration)
+  - Whole-file block parsing (future use case)
+test_suite: test-rel02.0-uc001-parse-and-apply-edits
+dependencies:
+  - D1: prd004-edit-format (parser contract and block format)
+  - D2: prd003-edit-engine (text edit Apply and multi-stage matching)
+  - D3: prd002-ast-engine (ReplaceFunctionBody for Go files)
+  - D4: prd001-coder-interface (Edit struct in pkg/types)
+risks:
+  - K1: "LLM output varies across models and prompts | Use multi-stage matching and test with diverse samples"
+  - K2: "Fuzzy matching may produce false positives | Set default threshold at 0.8 and log the matched stage"
+references:
+  - prd004-edit-format
+  - prd003-edit-engine
+  - prd002-ast-engine
+  - prd001-coder-interface
+  - docs/ARCHITECTURE.md

@@ -1,0 +1,85 @@
+id: prd009-technology-stack
+title: Technology Stack and Project Structure
+problem: |
+  go-coder needs a well-defined technology stack and project layout so that
+  all components are built with consistent dependencies, follow Go
+  conventions, and can be imported as a library by external projects
+  (primarily mage-claude-orchestrator). The project structure must separate
+  the public API (pkg/) from internal implementation (internal/) and provide
+  a test CLI (cmd/) for development.
+goals:
+  - G1: Define the Go module, dependencies, and version constraints
+  - G2: Define the directory layout following standard Go conventions
+  - G3: Define the test CLI structure using Cobra and Viper
+  - G4: Define the build automation using Mage
+requirements:
+  R1:
+    title: Go Module
+    items:
+      - R1.1: The module path must be github.com/petar-djukic/go-coder
+      - R1.2: The minimum Go version must be 1.24
+      - R1.3: All dependencies must be pinned to specific versions in go.sum
+      - R1.4: The module must be importable as a library (no main package in the module root)
+  R2:
+    title: Dependencies
+    items:
+      - R2.1: AWS SDK - aws-sdk-go-v2 and aws-sdk-go-v2/service/bedrockruntime for LLM access
+      - R2.2: Tree-sitter - smacker/go-tree-sitter for multi-language symbol extraction
+      - R2.3: Git - go-git/go-git/v5 for git operations
+      - R2.4: CLI - spf13/cobra for command structure and spf13/viper for configuration
+      - R2.5: Testing - stretchr/testify for assertions
+      - R2.6: Diff - sergi/go-diff for fuzzy text matching
+      - R2.7: UUID - google/uuid for unique identifiers
+      - R2.8: Standard library packages go/ast, go/parser, go/format, go/types, go/token for AST operations (no external dependency needed)
+      - R2.9: No dependency on Python, Node.js, or any non-Go runtime
+  R3:
+    title: Project Structure
+    items:
+      - R3.1: cmd/go-coder/ must contain the test CLI entry point (main.go)
+      - R3.2: pkg/coder/ must contain the public Coder interface, Config, and Result types
+      - R3.3: pkg/types/ must contain shared types (Edit, Symbol, Message, SymbolKind)
+      - R3.4: internal/ast/ must contain the Go AST parser, symbol table, and mutation engine
+      - R3.5: internal/editor/ must contain the text-based search/replace engine
+      - R3.6: internal/editformat/ must contain the LLM response parser
+      - R3.7: internal/llm/ must contain the AWS Bedrock client and prompt templates
+      - R3.8: internal/repomap/ must contain the repository map (tree-sitter, PageRank)
+      - R3.9: internal/feedback/ must contain the compiler/test feedback loop
+      - R3.10: internal/git/ must contain the git integration
+      - R3.11: internal/coder/ must contain the Coder implementation that orchestrates all components
+      - R3.12: magefiles/ must contain Mage build automation targets
+      - R3.13: tests/integration/ must contain integration tests
+      - R3.14: docs/ must contain VISION, ARCHITECTURE, PRDs, use cases, test suites
+  R4:
+    title: Test CLI
+    items:
+      - R4.1: The CLI must use cobra for command structure
+      - R4.2: The CLI must use viper for configuration (config file, env vars, flags)
+      - "R4.3: The CLI must support a \"run\" command: go-coder run --prompt \"task description\""
+      - "R4.4: The CLI must support --workdir flag to specify the repository root (default: current directory)"
+      - R4.5: The CLI must support --model flag to specify the Bedrock model ID
+      - R4.6: The CLI must support --region flag for AWS region
+      - R4.7: The CLI must support --max-retries flag
+      - R4.8: The CLI must support --test-cmd flag for the test command
+      - R4.9: The CLI must support --no-git flag to disable git operations
+      - R4.10: The CLI must support a config file at .go-coder.yaml in the working directory
+      - "R4.11: The CLI must support an \"undo\" command to revert the last AI commit"
+      - "R4.12: The CLI must support a \"version\" command"
+  R5:
+    title: Build Automation (Mage)
+    items:
+      - R5.1: mage build must compile the test CLI binary
+      - R5.2: mage test must run all unit tests
+      - R5.3: mage lint must run golangci-lint
+      - R5.4: mage integration must run integration tests (tests/integration/)
+      - R5.5: mage clean must remove build artifacts
+non_goals:
+  - This PRD does not define CI/CD pipelines
+  - This PRD does not define container image builds (the orchestrator handles that)
+  - This PRD does not define release packaging or distribution
+acceptance_criteria:
+  - go.mod exists with correct module path and Go version
+  - All specified directories exist with at least a placeholder file
+  - Test CLI compiles and runs "go-coder version"
+  - Test CLI reads configuration from flags, env vars, and .go-coder.yaml
+  - Mage targets build, test, lint, and clean work
+  - The module is importable by another Go project from pkg/coder and pkg/types

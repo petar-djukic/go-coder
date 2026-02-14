@@ -1,0 +1,72 @@
+id: prd006-repo-map
+title: Repository Map
+
+problem: |
+  LLMs have limited context windows. Sending every file in a repository is
+  too expensive and noisy. We need a way to select the most relevant code
+  for a given task and present it as a compact map that fits within a token
+  budget. Aider proved that using tree-sitter for symbol extraction combined
+  with PageRank on a file dependency graph selects better context than naive
+  file listing or keyword search.
+
+goals:
+  - G1: Extract symbol definitions and references across all file types using tree-sitter
+  - G2: Build a file dependency graph from cross-file symbol references
+  - G3: Rank files by relevance using PageRank with personalization
+  - G4: Render a compact repository map within a configurable token budget
+  - G5: Cache symbol extraction results for incremental updates
+
+requirements:
+  R1:
+    title: Symbol Extraction
+    items:
+      - R1.1: The extractor must use smacker/go-tree-sitter to parse files
+      - R1.2: The extractor must support Go, Python, JavaScript, TypeScript, YAML, and Markdown at minimum
+      - R1.3: For each supported language, the extractor must use tree-sitter query files (.scm) to identify symbol definitions and references
+      - R1.4: "Each extracted symbol must include: file path, symbol name, kind (definition or reference), line number"
+      - R1.5: For Go files, the extractor should prefer the native go/ast symbol table (from prd002) when available, falling back to tree-sitter
+      - R1.6: Files that fail to parse must be skipped with a warning, not abort the extraction
+  R2:
+    title: Dependency Graph
+    items:
+      - R2.1: The graph must be a directed multigraph where nodes are source files
+      - R2.2: An edge from file A to file B exists when file A references a symbol defined in file B
+      - R2.3: Edge weight must reflect the number of references multiplied by an identifier quality score
+      - R2.4: "Quality score for identifiers: longer names (8+ chars) get weight 1.0, shorter names get 0.5, underscore-prefixed names get 0.1"
+      - R2.5: Symbols defined in 5 or more files (common names) must have their edge weight reduced by factor 0.1
+  R3:
+    title: PageRank Ranking
+    items:
+      - R3.1: The ranker must implement the PageRank algorithm on the dependency graph
+      - R3.2: The personalization vector must give 100x weight to files mentioned in the user prompt or marked as relevant by the caller
+      - R3.3: The damping factor must be configurable, default 0.85
+      - R3.4: PageRank must converge within 100 iterations or a tolerance of 1e-6, whichever comes first
+      - R3.5: The output must be a list of (file path, symbol name, score) tuples sorted by score descending
+  R4:
+    title: Map Rendering
+    items:
+      - R4.1: The renderer must select symbols from the ranked list until the token budget is reached
+      - R4.2: Token counting must use a configurable tokens-per-character ratio (default 0.25) or an actual tokenizer if available
+      - R4.3: The rendered map must show file paths as a tree structure with symbol signatures indented under each file
+      - R4.4: Long lines must be truncated to 100 characters
+      - R4.5: The map must include a header line stating the number of files and symbols shown vs total
+  R5:
+    title: Caching
+    items:
+      - R5.1: Symbol extraction results must be cached keyed on file path and modification time
+      - R5.2: The cache must use an in-memory map (not SQLite, to avoid external dependencies for the library)
+      - R5.3: Cache entries must be invalidated when the file modification time changes
+      - R5.4: The full graph and PageRank results must be recomputed when any file changes (cache is per-file for extraction only)
+
+non_goals:
+  - This PRD does not define embedding-based semantic search or vector databases
+  - This PRD does not define caching to disk (in-memory only for library use)
+  - This PRD does not define language-specific reference resolution (we rely on name matching, not type resolution)
+
+acceptance_criteria:
+  - Tree-sitter extracts symbols from a Go test repository
+  - Dependency graph has edges between files that reference each other's symbols
+  - PageRank produces a ranked list biased toward personalized files
+  - Rendered map fits within the token budget
+  - Cache avoids re-parsing unchanged files
+  - Unsupported file types are skipped without errors

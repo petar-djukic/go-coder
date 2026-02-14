@@ -1,0 +1,76 @@
+id: prd002-ast-engine
+title: Go AST Engine
+problem: |
+  To edit Go code reliably, we need to understand its structure. Text-based
+  edits are prone to whitespace and formatting errors. By parsing Go source
+  into ASTs, we can perform surgical edits that preserve formatting and
+  comments, and we can build a symbol table that gives the LLM precise
+  context about the codebase.
+goals:
+  - G1: Parse Go source files into AST representations
+  - G2: Build an in-memory symbol table of all exported and unexported symbols
+  - G3: Provide mutation operations for common code changes
+  - G4: Preserve comments during mutation
+  - G5: Write mutated ASTs back to disk with correct formatting
+requirements:
+  R1:
+    title: File Scanner
+    items:
+      - R1.1: ScanDir must walk a directory tree and find all .go files, respecting .gitignore
+      - R1.2: ScanDir must skip vendor/, .git/, and testdata/ directories by default
+      - R1.3: ScanDir must use a bounded worker pool (configurable concurrency) to parse files in parallel
+      - R1.4: ScanDir must return a map of file path to *ast.File
+      - R1.5: Parse errors for individual files must be collected but must not abort the scan
+  R2:
+    title: Symbol Table
+    items:
+      - R2.1: BuildSymbolTable must extract all function declarations (name, signature, position)
+      - R2.2: BuildSymbolTable must extract all type declarations (structs, interfaces, type aliases)
+      - R2.3: BuildSymbolTable must extract all method declarations (receiver type, name, signature)
+      - R2.4: BuildSymbolTable must extract all package-level variable and constant declarations
+      - R2.5: The symbol table must support lookup by name, returning all symbols with that name
+      - R2.6: The symbol table must support lookup by file, returning all symbols in that file
+      - R2.7: The symbol table must support lookup by kind (function, struct, interface, method, variable, constant)
+      - "R2.8: Each symbol entry must include: Name, Kind, FilePath, Line, Column, Signature, Doc (doc comment text)"
+      - "R2.9: Signature must be the function/method signature string (e.g., \"func(ctx context.Context, id string) (*Crumb, error)\")"
+      - R2.10: For structs, Signature must list field names and types
+      - R2.11: For interfaces, Signature must list method signatures
+  R3:
+    title: AST Mutation
+    items:
+      - R3.1: ReplaceFunctionBody must replace the body of a named function with new Go code
+      - R3.2: ReplaceFunctionBody must parse the replacement code string into AST nodes before injection
+      - R3.3: ReplaceFunctionBody must return an error if the function name is not found
+      - R3.4: ReplaceFunctionBody must return an error if the replacement code does not parse as valid Go statements
+      - R3.5: AddFunction must add a new function declaration to a file
+      - R3.6: AddFunction must parse the complete function source and inject it into the AST
+      - R3.7: RemoveFunction must remove a function declaration by name
+      - R3.8: ModifyStruct must add, remove, or rename fields on a struct type
+      - R3.9: AddImport must add an import path to the file's import block, using astutil.AddImport
+      - R3.10: RemoveImport must remove an unused import path, using astutil.DeleteImport
+      - R3.11: All mutation operations must preserve existing comments using ast.CommentMap
+  R4:
+    title: Code Generation (Write-back)
+    items:
+      - R4.1: WriteFile must render an *ast.File back to disk using go/format.Node
+      - R4.2: The output must be gofmt-compliant (go/format guarantees this)
+      - R4.3: WriteFile must use atomic write (write to temp file, then rename) to prevent corruption
+      - R4.4: WriteFile must preserve the original file's permissions
+  R5:
+    title: Comment Preservation
+    items:
+      - R5.1: All parsing must use parser.ParseComments mode
+      - R5.2: Mutation operations must build an ast.CommentMap before modification and re-attach comments after
+      - R5.3: Orphan comments (comments not attached to any node) must be preserved in their original position
+      - R5.4: Doc comments on functions and types must remain attached to their declarations after mutation
+non_goals:
+  - This PRD does not define cross-package type resolution (that requires go/types integration in a later phase)
+  - This PRD does not define tree-sitter integration (that belongs to the repo map PRD)
+  - This PRD does not define editing non-Go files
+acceptance_criteria:
+  - ScanDir finds all .go files in a test repository and returns parsed ASTs
+  - BuildSymbolTable extracts functions, structs, interfaces, methods, variables from a test file
+  - ReplaceFunctionBody replaces a function body and the result compiles
+  - Comments are preserved after mutation (doc comments, inline comments, orphan comments)
+  - WriteFile produces gofmt-compliant output
+  - All operations handle error cases (missing function, invalid code, parse errors)

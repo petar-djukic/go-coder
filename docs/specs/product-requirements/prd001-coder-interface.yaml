@@ -1,0 +1,75 @@
+id: prd001-coder-interface
+title: Coder Public Interface
+problem: |
+  Callers of go-coder need a stable, simple API to invoke the coding agent.
+  The library performs several internal steps: repository indexing, AST
+  parsing, LLM interaction, edit generation, edit application, test
+  verification, and feedback loops on failure. Without a well-defined
+  public interface, every caller must understand and orchestrate these
+  internals. We need a single entry point that hides this complexity
+  behind one Run method and a small set of configuration and result types.
+goals:
+  - G1: Define the Config struct for configuring a Coder instance
+  - G2: Define the Coder interface with a single Run method
+  - G3: Define the Result struct returned by Run
+  - G4: Define shared types in pkg/types (Edit, Symbol, Message)
+requirements:
+  R1:
+    title: Configuration
+    items:
+      - R1.1: Config must include WorkDir (string), the repository root to operate on
+      - R1.2: Config must include Model (string), the Bedrock model ID (e.g., "anthropic.claude-sonnet-4-5-20250929-v1:0")
+      - R1.3: Config must include Region (string), the AWS region for Bedrock
+      - R1.4: Config must include MaxRetries (int), the maximum feedback loop iterations with a default of 3
+      - R1.5: Config must include TestCmd (string), the command to run tests (e.g., "go test ./..."); empty means skip testing
+      - R1.6: Config must include MapTokenBudget (int), the maximum tokens for repository map with a default of 2048
+      - R1.7: Config must include MaxTokens (int), the maximum tokens for LLM response with a default of 4096
+      - R1.8: Config validation must fail if WorkDir is empty or does not exist on the filesystem
+      - R1.9: Config validation must fail if Model is empty
+      - R1.10: Config validation must fail if Region is empty
+  R2:
+    title: Coder Interface
+    items:
+      - "R2.1: The Coder interface must define Run(ctx context.Context, prompt string) (*Result, error)"
+      - R2.2: Run must index the repository, assemble context, generate edits, apply them, verify, and retry on failure
+      - R2.3: Run must respect context cancellation at each stage
+      - R2.4: Run must return a non-nil Result even when errors occur (partial results are valid)
+  R3:
+    title: Result Struct
+    items:
+      - R3.1: Result must include ModifiedFiles ([]string), the paths of files that were changed
+      - R3.2: Result must include Errors ([]string), the remaining errors after all retries
+      - R3.3: Result must include TokensUsed (int), the total tokens consumed across all LLM calls
+      - R3.4: Result must include Retries (int), the number of retry iterations performed
+      - R3.5: Result must include Success (bool), true if no errors remain
+  R4:
+    title: Constructor
+    items:
+      - "R4.1: New(cfg Config) (Coder, error) must validate the config and return a ready-to-use Coder"
+      - R4.2: New must return a descriptive error if config validation fails
+      - R4.3: New must initialize the LLM client but must not index the repository (indexing happens in Run)
+  R5:
+    title: Shared Types
+    items:
+      - R5.1: Edit must include FilePath (string), OldContent (string), and NewContent (string)
+      - R5.2: Edit must include IsCreate (bool) for new file creation
+      - R5.3: Symbol must include Name (string), Kind (SymbolKind), FilePath (string), Line (int), and Signature (string)
+      - "R5.4: SymbolKind must be an enum with values: Function, Method, Struct, Interface, Variable, Constant"
+      - R5.5: Message must include Role (string) and Content (string) for LLM message construction
+  R6:
+    title: Error Types
+    items:
+      - R6.1: ErrInvalidConfig must be returned when Config validation fails
+      - R6.2: ErrLLMFailure must be returned when the LLM call fails (network, auth, rate limit)
+      - R6.3: ErrParseFailure must be returned when the LLM response cannot be parsed into edits
+non_goals:
+  - This PRD does not define the internal implementation of the feedback loop, AST engine, or edit format parser
+  - This PRD does not define the CLI interface (that is a separate concern)
+  - This PRD does not define provider abstraction for multiple LLM backends
+acceptance_criteria:
+  - Config struct includes all specified fields with correct types and defaults
+  - Coder interface has exactly one method, Run
+  - Result struct includes all specified fields
+  - New validates config and returns descriptive errors on failure
+  - Error types ErrInvalidConfig, ErrLLMFailure, and ErrParseFailure are defined and documented
+  - All types compile and are importable from pkg/coder and pkg/types

@@ -1,0 +1,148 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: test-rel06.0-uc001-auto-commit-and-undo
+title: Git auto-commit and undo operations
+description: >
+  Validates the git integration module for auto-commit and undo workflows.
+  Test cases cover staging of agent-modified files, attribution trailers,
+  separate dirty file commits, conventional commit message format, undo of
+  go-coder commits, refusal to undo non-go-coder commits, and no-git mode.
+traces:
+  - rel06.0-uc001-auto-commit-and-undo
+tags:
+  - git
+  - integration
+
+preconditions:
+  - A git-initialized test repository with some existing commits exists in a temporary directory
+  - The repository has at least one prior commit so HEAD is valid
+  - Git user.name and user.email are configured in the test repo
+
+test_cases:
+  - name: Auto-commit stages modified files
+    description: >
+      After the agent modifies two files, auto-commit stages only those
+      two files and creates a commit. Unmodified files are not included.
+    inputs:
+      existing_files:
+        - path: main.go
+          content: |
+            package main
+            func main() {}
+        - path: util.go
+          content: |
+            package main
+            func helper() {}
+        - path: readme.md
+          content: "unchanged"
+      modified_files:
+        - main.go
+        - util.go
+      command: auto-commit --work-dir .
+    expected:
+      exit_code: 0
+      state:
+        committed_files:
+          - main.go
+          - util.go
+        not_committed:
+          - readme.md
+
+  - name: Commit has attribution trailer
+    description: >
+      The auto-commit includes a Co-Authored-By trailer identifying
+      go-coder as the author of the changes.
+    inputs:
+      modified_files:
+        - main.go
+      command: auto-commit --work-dir .
+    expected:
+      exit_code: 0
+      state:
+        commit_message_contains: "Co-Authored-By:"
+        commit_message_contains: "go-coder"
+
+  - name: Dirty files committed separately
+    description: >
+      When the working tree has uncommitted changes before the agent runs,
+      and DirtyCommit is enabled, those dirty files are committed in a
+      separate commit before the agent's changes.
+    inputs:
+      dirty_files:
+        - path: config.yaml
+          content: "dirty: true"
+      modified_files:
+        - main.go
+      env:
+        DIRTY_COMMIT: "true"
+      command: auto-commit --work-dir . --dirty-commit
+    expected:
+      exit_code: 0
+      state:
+        commit_count: 2
+        first_commit_files:
+          - config.yaml
+        second_commit_files:
+          - main.go
+
+  - name: Conventional commit format
+    description: >
+      The generated commit message follows the conventional commits format
+      with a type prefix (e.g., feat, fix, refactor) derived from the
+      task prompt.
+    inputs:
+      prompt: "add a fibonacci function"
+      modified_files:
+        - math.go
+      command: auto-commit --work-dir . --prompt "add a fibonacci function"
+    expected:
+      exit_code: 0
+      state:
+        commit_message_matches: "^(feat|fix|refactor|chore|docs|test|style|perf|ci|build):"
+
+  - name: Undo reverts last AI commit
+    description: >
+      After an auto-commit with a go-coder trailer, calling undo performs
+      a soft reset of HEAD~1, restoring the staged changes.
+    inputs:
+      command: undo --work-dir .
+      precondition: auto-commit was the last commit with go-coder trailer
+    expected:
+      exit_code: 0
+      state:
+        head_moved_back: true
+        files_staged: true
+        previous_commit_restored: true
+
+  - name: Undo refuses non-AI commits
+    description: >
+      When the last commit does not contain a go-coder Co-Authored-By
+      trailer, undo exits with an error and does not modify the repository.
+    inputs:
+      command: undo --work-dir .
+      precondition: last commit is a manual commit without go-coder trailer
+    expected:
+      exit_code: 1
+      stderr_contains: "not a go-coder commit"
+      state:
+        head_unchanged: true
+
+  - name: No-git mode skips all git operations
+    description: >
+      When the NoGit configuration option is set, auto-commit and undo
+      are no-ops that return success without modifying the repository.
+    inputs:
+      modified_files:
+        - main.go
+      env:
+        NO_GIT: "true"
+      command: auto-commit --work-dir . --no-git
+    expected:
+      exit_code: 0
+      state:
+        commit_count: 0
+        files_uncommitted: true
+
+cleanup:
+  - Remove the temporary test repository

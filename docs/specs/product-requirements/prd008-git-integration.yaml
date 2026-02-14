@@ -1,0 +1,66 @@
+id: prd008-git-integration
+title: Git Integration
+problem: |
+  After the coding agent applies edits, those changes need to be committed
+  to git with meaningful messages. The agent must also handle pre-existing
+  uncommitted changes (dirty files) to avoid mixing human work with
+  AI-generated changes. An undo capability lets callers revert the last AI
+  commit if the result is unsatisfactory.
+goals:
+  - G1: Auto-commit successful edits with descriptive commit messages
+  - G2: Handle dirty files by committing them separately before AI edits
+  - G3: Provide undo to revert the last AI-generated commit
+  - G4: Generate commit messages that reference the task prompt
+requirements:
+  R1:
+    title: Auto-Commit
+    items:
+      - R1.1: After successful edit application and verification, the git module must stage all modified files and commit
+      - R1.2: The commit message must include a summary of what changed (files modified, functions added/changed)
+      - "R1.3: The commit must include attribution: append \"Co-Authored-By: go-coder <noreply@go-coder>\" as a trailer"
+      - R1.4: Auto-commit must be optional, controlled by a Config.AutoCommit bool (default true)
+      - R1.5: The commit must only stage files that were modified by the agent, not unrelated files
+      - R1.6: If git is not initialized in the working directory, auto-commit must be skipped with a warning (not an error)
+  R2:
+    title: Dirty File Handling
+    items:
+      - R2.1: Before applying AI edits, the git module must check for uncommitted changes
+      - R2.2: If uncommitted changes exist and Config.DirtyCommit is true (default), they must be committed as a separate "pre-edit" commit
+      - "R2.3: The pre-edit commit message must be \"go-coder: save uncommitted changes before edit\""
+      - R2.4: If Config.DirtyCommit is false and uncommitted changes exist, Run must return an error
+      - R2.5: Staged but uncommitted changes must be handled the same as unstaged changes
+  R3:
+    title: Commit Message Generation
+    items:
+      - R3.1: The commit message must summarize the coding task (first line, max 72 chars)
+      - R3.2: The commit body must list the files that were modified
+      - R3.3: The commit message must be generated from the task prompt and the list of changes, not by calling the LLM (to avoid extra token cost)
+      - "R3.4: The format must follow conventional commits style: \"feat: <summary>\" for new features, \"fix: <summary>\" for fixes, \"refactor: <summary>\" for refactoring"
+      - R3.5: The type (feat/fix/refactor) must be inferred from keywords in the prompt
+  R4:
+    title: Undo
+    items:
+      - R4.1: Undo must revert the most recent commit made by go-coder
+      - R4.2: Undo must identify go-coder commits by the Co-Authored-By trailer
+      - R4.3: Undo must use git reset --soft HEAD~1 to preserve changes in the working tree
+      - R4.4: Undo must refuse to revert commits not made by go-coder
+      - R4.5: Undo must be exposed as a method on the Coder interface or as a standalone function in the git package
+  R5:
+    title: Git Operations
+    items:
+      - R5.1: Git operations must use go-git/go-git/v5 as the primary implementation
+      - R5.2: If go-git encounters limitations, the module may fall back to os/exec with the git CLI
+      - R5.3: All git operations must work in bare worktree checkouts (for orchestrator compatibility)
+      - R5.4: The module must not run git push (callers handle remote operations)
+      - R5.5: The module must not modify git config
+non_goals:
+  - This PRD does not define branch management (the orchestrator handles branch creation and merging)
+  - This PRD does not define LLM-generated commit messages (we generate them from the prompt and file list)
+  - This PRD does not define git push or remote operations
+acceptance_criteria:
+  - Auto-commit creates a commit with the modified files and attribution trailer
+  - Dirty files are committed separately before AI edits
+  - Undo reverts the last go-coder commit and preserves changes in working tree
+  - Undo refuses to revert non-go-coder commits
+  - Commit messages follow conventional commits format
+  - Git operations work in worktree checkouts

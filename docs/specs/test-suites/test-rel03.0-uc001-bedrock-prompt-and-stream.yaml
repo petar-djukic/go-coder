@@ -1,0 +1,182 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: test-rel03.0-uc001-bedrock-prompt-and-stream
+title: Bedrock prompt construction and response streaming
+description: >
+  Validates that the LLM client constructs prompts correctly from system
+  template, repo map, file contents, and user prompt; streams response
+  tokens through a channel; tracks token usage from API metadata; and
+  handles errors including rate limits, cancellation, and auth failures.
+traces:
+  - rel03.0-uc001-bedrock-prompt-and-stream
+tags:
+  - integration
+  - llm
+
+preconditions:
+  - AWS Bedrock credentials configured (real or mock)
+  - A mock or test model endpoint available for deterministic responses
+  - System prompt template file exists as an embedded Go template
+
+test_cases:
+  - name: System prompt template renders with edit format markers
+    description: >
+      The system prompt template, when rendered, includes the search/replace
+      block markers (<<<<<<< SEARCH, =======, >>>>>>> REPLACE) so the LLM
+      knows the expected edit format.
+    inputs:
+      command: RenderSystemPrompt(templateData)
+      env:
+        os: "darwin"
+        go_version: "1.23"
+    expected:
+      exit_code: 0
+      stdout_contains: "<<<<<<< SEARCH"
+      state:
+        rendered_contains:
+          - "<<<<<<< SEARCH"
+          - "======="
+          - ">>>>>>> REPLACE"
+          - "darwin"
+
+  - name: Message array includes system, repo map, file contents, user prompt in order
+    description: >
+      The constructed message array places the system message first, followed
+      by a user message with the repo map, a user message with file contents
+      (including paths and line numbers), and the user prompt as the final
+      user message.
+    inputs:
+      command: ConstructMessages(systemPrompt, repoMap, fileContents, userPrompt)
+      env:
+        system_prompt: "You are a coding assistant."
+        repo_map: "main.go: func main()\nlib.go: func Helper()"
+        file_contents:
+          - path: "main.go"
+            content: "package main\n\nfunc main() {}\n"
+          - path: "lib.go"
+            content: "package main\n\nfunc Helper() string { return \"\" }\n"
+        user_prompt: "Add error handling to Helper"
+    expected:
+      exit_code: 0
+      state:
+        message_count: 4
+        message_0_role: system
+        message_1_role: user
+        message_1_contains: "main.go: func main()"
+        message_2_role: user
+        message_2_contains: "main.go"
+        message_3_role: user
+        message_3_contains: "Add error handling to Helper"
+
+  - name: Streaming yields tokens through channel
+    description: >
+      When ConverseStream returns a multi-token response, each token is
+      delivered through the channel individually as it arrives, and the
+      channel is closed after the final token.
+    inputs:
+      command: SendPrompt(ctx, messages)
+      env:
+        mock_response_tokens:
+          - "Here"
+          - " is"
+          - " the"
+          - " code"
+    expected:
+      exit_code: 0
+      state:
+        channel_received_count: 4
+        channel_received_tokens:
+          - "Here"
+          - " is"
+          - " the"
+          - " code"
+        channel_closed: true
+
+  - name: Full response text is accumulated correctly
+    description: >
+      The client accumulates all streamed tokens into a single response
+      string and returns it alongside the token channel.
+    inputs:
+      command: SendPrompt(ctx, messages)
+      env:
+        mock_response_tokens:
+          - "func "
+          - "Hello"
+          - "() "
+          - "string"
+    expected:
+      exit_code: 0
+      state:
+        full_response: "func Hello() string"
+
+  - name: Token usage is extracted from response metadata
+    description: >
+      After streaming completes, the client reports input and output token
+      counts from the Bedrock API response metadata, not from estimation.
+    inputs:
+      command: SendPrompt(ctx, messages)
+      env:
+        mock_input_tokens: 150
+        mock_output_tokens: 42
+    expected:
+      exit_code: 0
+      state:
+        input_tokens: 150
+        output_tokens: 42
+
+  - name: Context cancellation returns partial content
+    description: >
+      When the context is cancelled during streaming, the client stops
+      reading tokens, closes the channel, and returns whatever content
+      was received before cancellation.
+    inputs:
+      command: SendPrompt(cancelledCtx, messages)
+      env:
+        mock_response_tokens:
+          - "partial"
+          - " content"
+          - " not"
+          - " received"
+        cancel_after_token: 2
+    expected:
+      exit_code: 0
+      state:
+        full_response: "partial content"
+        channel_received_count: 2
+        channel_closed: true
+
+  - name: Rate limit error triggers retry with backoff
+    description: >
+      When Bedrock returns a ThrottlingException, the client retries with
+      exponential backoff up to 3 attempts. On the third attempt the mock
+      succeeds and the response is returned.
+    inputs:
+      command: SendPrompt(ctx, messages)
+      env:
+        mock_throttle_count: 2
+        mock_response_after_retries: "success after retry"
+    expected:
+      exit_code: 0
+      state:
+        full_response: "success after retry"
+        retry_count: 2
+
+  - name: Auth failure returns ErrLLMFailure with credential message
+    description: >
+      When Bedrock returns an authentication error (e.g. invalid credentials
+      or expired token), the client returns ErrLLMFailure with a message
+      indicating the credential issue.
+    inputs:
+      command: SendPrompt(ctx, messages)
+      env:
+        mock_error: "UnrecognizedClientException"
+    expected:
+      exit_code: 1
+      stderr_contains: "credential"
+      state:
+        error_type: ErrLLMFailure
+        error_message_contains: "credential"
+
+cleanup:
+  - Remove any temporary prompt template files created during tests

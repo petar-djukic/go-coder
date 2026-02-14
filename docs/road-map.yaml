@@ -1,0 +1,94 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+releases:
+  - version: "01.0"
+    name: AST Foundation
+    status: not_started
+    description: >
+      Parse Go source files into ASTs, build a symbol table, and scan
+      repositories in parallel. This phase establishes the structural
+      understanding of Go code that all later phases depend on.
+    use_cases:
+      - id: rel01.0-uc001-parse-and-index
+        summary: Parse a Go repository and build a symbol table
+        status: not_started
+
+  - version: "01.1"
+    name: AST Mutation
+    status: not_started
+    description: >
+      Mutate Go ASTs to replace function bodies, modify struct fields,
+      and manage imports. Write mutated trees back to disk with correct
+      formatting and comment preservation.
+    use_cases:
+      - id: rel01.1-uc001-mutate-function-body
+        summary: Replace a function body via AST mutation and write back to disk
+        status: not_started
+
+  - version: "02.0"
+    name: Edit Format and Text Edits
+    status: not_started
+    description: >
+      Parse LLM responses into edit instructions (search/replace blocks).
+      Apply text-based edits to non-Go files with multi-stage matching.
+    use_cases:
+      - id: rel02.0-uc001-parse-and-apply-edits
+        summary: Parse search/replace blocks from LLM output and apply them to files
+        status: not_started
+
+  - version: "03.0"
+    name: LLM Integration
+    status: not_started
+    description: >
+      Connect to AWS Bedrock, construct prompts from repository context,
+      stream responses, and extract edit blocks from the output.
+    use_cases:
+      - id: rel03.0-uc001-bedrock-prompt-and-stream
+        summary: Send a coding prompt to Bedrock and stream the response
+        status: not_started
+
+  - version: "04.0"
+    name: Feedback Loop
+    status: not_started
+    description: >
+      Run the Go compiler and test suite after edits. Format errors into
+      follow-up prompts and retry up to a configurable limit.
+    use_cases:
+      - id: rel04.0-uc001-compile-test-retry
+        summary: Apply edits, run compiler and tests, retry on failure
+        status: not_started
+
+  - version: "05.0"
+    name: Repository Map
+    status: not_started
+    description: >
+      Extract symbols across all languages using tree-sitter, build a
+      dependency graph, rank files with PageRank, and render a condensed
+      map within a token budget.
+    use_cases:
+      - id: rel05.0-uc001-build-repo-map
+        summary: Build a ranked repository map and render it within token limits
+        status: not_started
+
+  - version: "06.0"
+    name: Git Integration
+    status: not_started
+    description: >
+      Auto-commit after successful edits, handle dirty files, support
+      undo, and generate commit messages.
+    use_cases:
+      - id: rel06.0-uc001-auto-commit-and-undo
+        summary: Auto-commit edits and undo the last commit
+        status: not_started
+
+  - version: "07.0"
+    name: CLI and Orchestrator Integration
+    status: not_started
+    description: >
+      Finalize the public Coder interface, build the test CLI with
+      Cobra/Viper, and validate integration with mage-claude-orchestrator.
+    use_cases:
+      - id: rel07.0-uc001-end-to-end-coding-task
+        summary: Run a complete coding task from prompt to committed code
+        status: not_started

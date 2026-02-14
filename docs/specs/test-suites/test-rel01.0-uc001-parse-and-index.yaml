@@ -1,0 +1,157 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: test-rel01.0-uc001-parse-and-index
+title: Parse and index Go repository
+description: >
+  Validates that ScanDir walks a Go repository, parses files in parallel,
+  collects errors without aborting, and that BuildSymbolTable extracts
+  all symbol kinds and supports lookup by name, file, and kind.
+traces:
+  - rel01.0-uc001-parse-and-index
+tags:
+  - ast
+  - smoke
+
+preconditions:
+  - A test fixtures directory exists at testdata/parse-and-index/ containing sample .go files
+  - The fixtures include functions, structs, interfaces, methods, package-level variables, and constants
+  - One fixture file contains a deliberate syntax error to test error collection
+  - A vendor/ subdirectory and a .git/ subdirectory exist within fixtures to test skip behavior
+
+test_cases:
+  - name: Scan finds all .go files
+    description: >
+      ScanDir discovers every .go file in the test fixtures tree and returns
+      a parsed AST for each valid file.
+    inputs:
+      command: ScanDir("testdata/parse-and-index", 4)
+    expected:
+      exit_code: 0
+      state:
+        ast_map_keys_contain:
+          - "testdata/parse-and-index/main.go"
+          - "testdata/parse-and-index/lib/helper.go"
+          - "testdata/parse-and-index/lib/types.go"
+        ast_map_key_count_ge: 3
+
+  - name: Scan skips vendor and .git directories
+    description: >
+      ScanDir must not return ASTs for files under vendor/, .git/,
+      or testdata/ subdirectories.
+    inputs:
+      command: ScanDir("testdata/parse-and-index", 4)
+    expected:
+      exit_code: 0
+      state:
+        ast_map_keys_must_not_contain:
+          - "testdata/parse-and-index/vendor/dep.go"
+          - "testdata/parse-and-index/.git/config.go"
+          - "testdata/parse-and-index/testdata/nested.go"
+
+  - name: Scan collects parse errors without aborting
+    description: >
+      When a .go file has a syntax error, ScanDir records the error
+      in the error list but continues scanning remaining files.
+    inputs:
+      command: ScanDir("testdata/parse-and-index", 4)
+      files:
+        - path: "testdata/parse-and-index/broken.go"
+          content: "package broken\nfunc broken({"
+    expected:
+      exit_code: 0
+      state:
+        parse_error_count_ge: 1
+        parse_errors_contain_file: "testdata/parse-and-index/broken.go"
+        ast_map_key_count_ge: 3
+
+  - name: Symbol table extracts functions with correct signatures
+    description: >
+      BuildSymbolTable extracts function declarations including name,
+      kind, file path, line number, and signature string.
+    inputs:
+      command: BuildSymbolTable(astMap)
+      env:
+        fixture_file: "testdata/parse-and-index/lib/helper.go"
+        fixture_content: |
+          package lib
+          // HelperFunc does something useful.
+          func HelperFunc(ctx context.Context, id string) (*Result, error) { return nil, nil }
+    expected:
+      exit_code: 0
+      state:
+        symbol_exists:
+          name: "HelperFunc"
+          kind: Function
+          file: "testdata/parse-and-index/lib/helper.go"
+          signature_contains: "func(ctx context.Context, id string) (*Result, error)"
+
+  - name: Symbol table extracts structs with field signatures
+    description: >
+      BuildSymbolTable extracts struct declarations and records their
+      field names and types in the Signature field.
+    inputs:
+      command: BuildSymbolTable(astMap)
+      env:
+        fixture_file: "testdata/parse-and-index/lib/types.go"
+        fixture_content: |
+          package lib
+          type Config struct {
+              Name    string
+              Timeout int
+          }
+    expected:
+      exit_code: 0
+      state:
+        symbol_exists:
+          name: "Config"
+          kind: Struct
+          file: "testdata/parse-and-index/lib/types.go"
+          signature_contains: "Name string"
+          signature_contains_also: "Timeout int"
+
+  - name: Lookup by name returns matching symbols
+    description: >
+      Querying the symbol table by name returns all symbols that share
+      that name, across different files and kinds.
+    inputs:
+      command: symbolTable.ByName("HelperFunc")
+    expected:
+      exit_code: 0
+      state:
+        result_count_ge: 1
+        all_results_have_name: "HelperFunc"
+
+  - name: Lookup by file returns all symbols in file
+    description: >
+      Querying the symbol table by file path returns every symbol
+      declared in that file and no symbols from other files.
+    inputs:
+      command: symbolTable.ByFile("testdata/parse-and-index/lib/types.go")
+    expected:
+      exit_code: 0
+      state:
+        result_count_ge: 1
+        all_results_have_file: "testdata/parse-and-index/lib/types.go"
+        no_results_have_file: "testdata/parse-and-index/lib/helper.go"
+
+  - name: Lookup by kind filters correctly
+    description: >
+      Querying the symbol table by kind returns only symbols of that
+      kind. For example, querying Function returns functions but not
+      structs, variables, or constants.
+    inputs:
+      command: symbolTable.ByKind(Function)
+    expected:
+      exit_code: 0
+      state:
+        result_count_ge: 1
+        all_results_have_kind: Function
+        no_results_have_kind:
+          - Struct
+          - Interface
+          - Variable
+          - Constant
+
+cleanup:
+  - Remove the test fixtures directory

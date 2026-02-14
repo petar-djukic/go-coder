@@ -1,0 +1,43 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: rel03.0-uc001-bedrock-prompt-and-stream
+title: Send Coding Prompt to Bedrock and Stream Response
+summary: |
+  The LLM client constructs a message array from the system prompt (with edit
+  format instructions), repository map, relevant file contents, and the user's
+  coding task. It sends this to AWS Bedrock via ConverseStream and yields tokens
+  through a channel. Token usage is tracked from API metadata.
+actor: The coder orchestrator requesting code generation
+trigger: Coder.Run assembles context and calls the LLM client
+flow:
+  - F1: "Load system prompt template (embedded via go:embed) with edit format instructions"
+  - F2: "Construct message array with system message, repo map, file contents, and user prompt"
+  - F3: "Call Bedrock ConverseStream API with the constructed messages"
+  - F4: "Stream response tokens through a channel"
+  - F5: "Accumulate the full response text from streamed tokens"
+  - F6: "Extract token usage (input/output tokens) from API response metadata"
+  - F7: "Return the complete response text and token counts"
+touchpoints:
+  - T1: "internal/llm Bedrock client (prd005-llm-client R1)"
+  - T2: "internal/llm message construction (prd005-llm-client R2)"
+  - T3: "internal/llm prompt templates (prd005-llm-client R3)"
+  - T4: "internal/llm streaming (prd005-llm-client R4)"
+  - T5: "internal/llm token tracking (prd005-llm-client R5)"
+success_criteria:
+  - S1: System prompt includes edit format instructions (search/replace block markers)
+  - S2: Messages include repo map, file contents, and user prompt in correct order
+  - S3: ConverseStream returns a streaming response
+  - S4: Tokens are yielded through a channel as they arrive
+  - S5: Token usage is reported from API metadata
+  - S6: Context cancellation stops streaming and returns partial content
+  - S7: Rate limit errors trigger exponential backoff retry
+out_of_scope:
+  - Edit parsing (handled by prd004-edit-format)
+  - Feedback loop retries (handled by prd007-feedback-loop)
+  - Repo map construction (handled by prd006-repo-map)
+test_suite: test-rel03.0-uc001-bedrock-prompt-and-stream
+dependencies:
+  - D1: prd005-llm-client (Bedrock client, message construction, streaming, token tracking)
+  - D2: prd004-edit-format (search/replace block markers referenced in system prompt)
+  - D3: prd001-coder-interface (Coder.Run orchestration contract)

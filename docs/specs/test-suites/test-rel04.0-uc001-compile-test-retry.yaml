@@ -1,0 +1,176 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: test-rel04.0-uc001-compile-test-retry
+title: Compiler and test feedback loop
+description: >
+  Validates the feedback loop verifier and retry pipeline. Test cases cover
+  build error detection, vet warning capture, test failure detection, error
+  formatting with file context, retry termination on success, retry termination
+  after MaxRetries, and context cancellation.
+traces:
+  - rel04.0-uc001-compile-test-retry
+tags:
+  - feedback
+  - compiler
+  - integration
+
+preconditions:
+  - A Go module with test files exists in a temporary directory
+  - Some source files contain intentional compilation errors
+  - The feedback verifier and retry loop are initialized
+
+test_cases:
+  - name: Build error detected and parsed
+    description: >
+      A Go file with a syntax error causes go build to fail. The verifier
+      parses the output into a CompileError struct with file path, line
+      number, and message.
+    inputs:
+      files:
+        - path: main.go
+          content: |
+            package main
+
+            func main() {
+                x :=
+            }
+      command: verify --work-dir .
+    expected:
+      exit_code: 1
+      state:
+        error_count: 1
+        errors:
+          - file_path: main.go
+            line_present: true
+            message_contains: "expected"
+
+  - name: Vet warning captured
+    description: >
+      A Go file that compiles but triggers a vet warning (e.g., unreachable
+      code) causes the verifier to capture the warning.
+    inputs:
+      files:
+        - path: main.go
+          content: |
+            package main
+
+            import "fmt"
+
+            func main() {
+                return
+                fmt.Println("unreachable")
+            }
+      command: verify --work-dir .
+    expected:
+      exit_code: 1
+      state:
+        vet_warning_count: 1
+        warnings:
+          - message_contains: "unreachable"
+
+  - name: Test failure detected
+    description: >
+      A Go test file with a failing test causes the test command to return
+      a non-zero exit code. The verifier detects the failure.
+    inputs:
+      files:
+        - path: math.go
+          content: |
+            package math
+
+            func Add(a, b int) int { return a - b }
+        - path: math_test.go
+          content: |
+            package math
+
+            import "testing"
+
+            func TestAdd(t *testing.T) {
+                if Add(2, 3) != 5 {
+                    t.Fatal("expected 5")
+                }
+            }
+      command: verify --work-dir . --test-cmd "go test ./..."
+    expected:
+      exit_code: 1
+      state:
+        test_failed: true
+        stderr_contains: "FAIL"
+
+  - name: Error formatting includes context lines
+    description: >
+      When a build error occurs on line 10, the error formatter includes
+      5 lines above and 5 lines below the error line from the source file.
+    inputs:
+      files:
+        - path: main.go
+          content: |
+            package main
+
+            import "fmt"
+
+            func helper() string {
+                return "ok"
+            }
+
+            func main() {
+                x :=
+                fmt.Println(helper())
+            }
+      command: format-errors --work-dir . --context-lines 5
+    expected:
+      exit_code: 0
+      stdout_contains: "func helper()"
+      stdout_contains: "func main()"
+      state:
+        context_lines_above: 5
+        context_lines_below: 5
+
+  - name: Retry stops on success
+    description: >
+      The retry loop runs verification, detects failure, sends a correction
+      prompt, applies the correction, and on the second verification the
+      build succeeds. The loop exits with success.
+    inputs:
+      max_retries: 3
+      initial_error: "syntax error on line 4"
+      correction_fixes_error: true
+    expected:
+      exit_code: 0
+      state:
+        retries: 1
+        success: true
+
+  - name: Retry stops after MaxRetries
+    description: >
+      The retry loop runs verification and correction MaxRetries times but
+      the error persists. The loop exits with failure after exhausting retries.
+    inputs:
+      max_retries: 2
+      initial_error: "syntax error on line 4"
+      correction_fixes_error: false
+    expected:
+      exit_code: 1
+      state:
+        retries: 2
+        success: false
+        error_contains: "max retries"
+
+  - name: Context cancellation terminates loop
+    description: >
+      When the context is cancelled during a retry iteration, the loop
+      exits immediately with a context cancellation error.
+    inputs:
+      max_retries: 5
+      initial_error: "syntax error on line 4"
+      cancel_after_iteration: 1
+    expected:
+      exit_code: 1
+      state:
+        retries: 1
+        success: false
+        error_contains: "context canceled"
+
+cleanup:
+  - Remove the temporary directory and all test files

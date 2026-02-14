@@ -1,0 +1,74 @@
+id: prd005-llm-client
+title: AWS Bedrock LLM Client
+problem: |
+  go-coder needs to send prompts to an LLM and receive streaming responses.
+  We use AWS Bedrock as our LLM provider, specifically the Converse API which
+  provides a unified interface across models. The client must handle prompt
+  construction (system message, repo map, file contents, user prompt),
+  streaming token delivery, token counting, and error handling (rate limits,
+  timeouts, auth failures).
+goals:
+  - G1: Connect to AWS Bedrock and invoke models via the Converse Stream API
+  - G2: Construct prompts from repository context and user input
+  - G3: Stream response tokens for real-time processing
+  - G4: Track token usage for reporting
+  - G5: Define prompt templates that instruct the LLM on the edit format
+requirements:
+  R1:
+    title: Bedrock Client
+    items:
+      - R1.1: The client must use aws-sdk-go-v2/service/bedrockruntime for API access
+      - R1.2: The client must use the ConverseStream API (not InvokeModel) for streaming responses
+      - R1.3: The client must accept model ID, region, and optional AWS credential profile as configuration
+      - R1.4: The client must use standard AWS credential chain (env vars, shared config, IAM role) when no profile is specified
+      - R1.5: The client must support configurable request timeout (default 300 seconds)
+  R2:
+    title: Message Construction
+    items:
+      - R2.1: The client must construct a message array with system message, repository context, file contents, and user prompt
+      - R2.2: The system message must contain the edit format instructions (how to produce search/replace blocks)
+      - R2.3: Repository context (the repo map) must be included as a separate user message
+      - R2.4: File contents for files the LLM will edit must be included with file paths and line numbers
+      - R2.5: The user prompt (the coding task) must be the final user message
+      - R2.6: For retry messages (feedback loop), compiler/test errors must be appended as a follow-up user message after the previous assistant response
+  R3:
+    title: Prompt Templates
+    items:
+      - R3.1: The system prompt must instruct the LLM to output edits as search/replace blocks with <<<<<<< SEARCH / ======= / >>>>>>> REPLACE markers
+      - R3.2: The system prompt must instruct the LLM to include the file path on the line before each search block
+      - R3.3: The system prompt must instruct the LLM that it can include multiple edit blocks in one response
+      - R3.4: The system prompt must instruct the LLM to show reasoning before edit blocks
+      - R3.5: Templates must be Go text/template files embedded via go:embed
+      - R3.6: The system prompt must include platform info (OS, Go version) for context
+  R4:
+    title: Streaming
+    items:
+      - R4.1: The client must yield response tokens through a channel as they arrive
+      - R4.2: The channel must carry token strings, not full messages
+      - R4.3: The client must signal completion by closing the channel
+      - R4.4: The client must respect context cancellation during streaming
+      - R4.5: On timeout or cancellation, the client must return partial content received so far
+  R5:
+    title: Token Tracking
+    items:
+      - R5.1: After each call, the client must report input tokens and output tokens consumed
+      - R5.2: Token counts must come from the Bedrock API response metadata (not estimated)
+      - R5.3: Cumulative token usage must be tracked across all calls within a single Run invocation
+  R6:
+    title: Error Handling
+    items:
+      - R6.1: Rate limit errors (ThrottlingException) must be retried with exponential backoff, up to 3 attempts
+      - R6.2: Auth failures must return ErrLLMFailure with a message indicating credential issues
+      - R6.3: Model not found errors must return ErrLLMFailure with the model ID that was requested
+      - R6.4: Timeout errors must return ErrLLMFailure with the duration exceeded
+non_goals:
+  - This PRD does not define support for non-Bedrock providers (no OpenAI, no direct Anthropic API)
+  - This PRD does not define conversation history management across multiple Run invocations
+  - This PRD does not define the repo map construction (that is prd006)
+acceptance_criteria:
+  - Client connects to Bedrock and streams a response for a simple prompt
+  - System prompt instructs the LLM to produce search/replace blocks
+  - Token usage is reported from API response metadata
+  - Rate limit errors trigger exponential backoff retry
+  - Context cancellation stops streaming and returns partial content
+  - Prompt templates are embedded Go templates

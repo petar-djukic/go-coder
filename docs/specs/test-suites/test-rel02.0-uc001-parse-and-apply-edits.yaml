@@ -1,0 +1,276 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: test-rel02.0-uc001-parse-and-apply-edits
+title: Parse and apply edit blocks from LLM response
+description: >
+  Validates the edit format parser and edit routing pipeline. Test cases
+  cover parsing single and multiple search/replace blocks, markdown fence
+  handling, routing by file extension, the three matching stages (exact,
+  whitespace-normalized, fuzzy), and error cases for malformed and empty
+  responses.
+traces:
+  - rel02.0-uc001-parse-and-apply-edits
+tags:
+  - parser
+  - editor
+  - integration
+
+preconditions:
+  - Sample LLM response strings with valid and invalid edit blocks are available as test fixtures
+  - A temporary directory contains test files including sample.go and config.yaml with known content
+  - The AST engine and text editor are initialized and ready to accept edits
+
+test_cases:
+  - name: Parse single search/replace block
+    description: >
+      A response containing one search/replace block produces exactly one
+      Edit with the correct file path, search text, and replacement text.
+    inputs:
+      response: |
+        Here is the fix:
+
+        internal/editor/apply.go
+        <<<<<<< SEARCH
+        func Apply(path string) error {
+            return nil
+        }
+        =======
+        func Apply(path string) error {
+            return applyEdit(path)
+        }
+        >>>>>>> REPLACE
+    expected:
+      edit_count: 1
+      edits:
+        - file_path: internal/editor/apply.go
+          old_content: |
+            func Apply(path string) error {
+                return nil
+            }
+          new_content: |
+            func Apply(path string) error {
+                return applyEdit(path)
+            }
+
+  - name: Parse multiple blocks in one response
+    description: >
+      A response with three search/replace blocks targeting different files
+      produces three Edits in the order they appear.
+    inputs:
+      response: |
+        I will update three files:
+
+        pkg/types/edit.go
+        <<<<<<< SEARCH
+        type Edit struct{}
+        =======
+        type Edit struct {
+            FilePath string
+        }
+        >>>>>>> REPLACE
+
+        internal/editor/apply.go
+        <<<<<<< SEARCH
+        return nil
+        =======
+        return applyEdit(path)
+        >>>>>>> REPLACE
+
+        config.yaml
+        <<<<<<< SEARCH
+        timeout: 30
+        =======
+        timeout: 60
+        >>>>>>> REPLACE
+    expected:
+      edit_count: 3
+      edits:
+        - file_path: pkg/types/edit.go
+        - file_path: internal/editor/apply.go
+        - file_path: config.yaml
+      reasoning_text_present: true
+
+  - name: Parse blocks wrapped in markdown fences
+    description: >
+      Edit blocks wrapped inside triple-backtick markdown code fences are
+      extracted correctly, stripping the fence markers.
+    inputs:
+      response: |
+        Here is the change:
+
+        ```
+        internal/editor/apply.go
+        <<<<<<< SEARCH
+        return nil
+        =======
+        return applyEdit(path)
+        >>>>>>> REPLACE
+        ```
+    expected:
+      edit_count: 1
+      edits:
+        - file_path: internal/editor/apply.go
+          old_content: "return nil\n"
+          new_content: "return applyEdit(path)\n"
+
+  - name: Route .go edits to AST engine
+    description: >
+      An edit targeting a .go file is dispatched to the AST engine
+      (ReplaceFunctionBody or AST-level apply), not the text editor.
+    inputs:
+      response: |
+        internal/ast/scan.go
+        <<<<<<< SEARCH
+        func ScanDir(root string) error {
+            return nil
+        }
+        =======
+        func ScanDir(root string) error {
+            return filepath.Walk(root, visit)
+        }
+        >>>>>>> REPLACE
+      files:
+        - path: internal/ast/scan.go
+          content: |
+            package ast
+
+            func ScanDir(root string) error {
+                return nil
+            }
+    expected:
+      routed_to: ast_engine
+      edit_count: 1
+
+  - name: Route .yaml edits to text editor
+    description: >
+      An edit targeting a .yaml file is dispatched to the text editor,
+      not the AST engine.
+    inputs:
+      response: |
+        config.yaml
+        <<<<<<< SEARCH
+        timeout: 30
+        =======
+        timeout: 60
+        >>>>>>> REPLACE
+      files:
+        - path: config.yaml
+          content: |
+            timeout: 30
+            retries: 3
+    expected:
+      routed_to: text_editor
+      edit_count: 1
+      state:
+        file_content_contains: "timeout: 60"
+
+  - name: Exact text match applies correctly
+    description: >
+      When the search text matches the file content byte-for-byte, the
+      exact matching stage succeeds and the replacement is applied.
+    inputs:
+      response: |
+        config.yaml
+        <<<<<<< SEARCH
+        retries: 3
+        =======
+        retries: 5
+        >>>>>>> REPLACE
+      files:
+        - path: config.yaml
+          content: |
+            timeout: 30
+            retries: 3
+    expected:
+      exit_code: 0
+      match_stage: exact
+      state:
+        file_content: |
+          timeout: 30
+          retries: 5
+
+  - name: Whitespace-normalized match handles indentation
+    description: >
+      When the LLM produces search text with different indentation than
+      the file (e.g., spaces vs tabs, extra leading spaces), the
+      whitespace-normalized stage matches successfully.
+    inputs:
+      response: |
+        config.yaml
+        <<<<<<< SEARCH
+          timeout:   30
+          retries:  3
+        =======
+        timeout: 60
+        retries: 5
+        >>>>>>> REPLACE
+      files:
+        - path: config.yaml
+          content: |
+            timeout: 30
+            retries: 3
+    expected:
+      exit_code: 0
+      match_stage: whitespace_normalized
+      state:
+        file_content: |
+          timeout: 60
+          retries: 5
+
+  - name: Fuzzy match catches minor LLM variations
+    description: >
+      When the LLM produces search text with minor differences (e.g.,
+      extra trailing space, slightly different punctuation) that do not
+      match exact or whitespace-normalized stages, the fuzzy matching
+      stage succeeds if similarity exceeds the 0.8 threshold.
+    inputs:
+      response: |
+        README.md
+        <<<<<<< SEARCH
+        This is a Go library coding agent.
+        =======
+        This is the go-coder library agent.
+        >>>>>>> REPLACE
+      files:
+        - path: README.md
+          content: |
+            This is a Go library coding agent
+    expected:
+      exit_code: 0
+      match_stage: fuzzy
+      state:
+        file_content: |
+          This is the go-coder library agent.
+
+  - name: Malformed block produces ParseError
+    description: >
+      A block missing the >>>>>>> REPLACE closing marker produces a
+      ParseError that includes the position and the raw text of the
+      malformed block.
+    inputs:
+      response: |
+        internal/editor/apply.go
+        <<<<<<< SEARCH
+        return nil
+        =======
+        return applyEdit(path)
+    expected:
+      edit_count: 0
+      parse_errors:
+        - position_present: true
+          raw_text_contains: "return nil"
+          message_contains: "unclosed block"
+
+  - name: Empty response produces NoEditsFound
+    description: >
+      A response with no search/replace blocks (only reasoning text or
+      empty string) produces the NoEditsFound error.
+    inputs:
+      response: ""
+    expected:
+      error_type: NoEditsFound
+      edit_count: 0
+
+cleanup:
+  - Remove the temporary directory and all test files

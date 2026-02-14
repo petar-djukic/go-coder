@@ -1,0 +1,49 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: rel07.0-uc001-end-to-end-coding-task
+title: End-to-End Coding Task
+summary: |
+  A caller creates a Coder from Config, calls Run with a coding prompt, and
+  receives a Result. Internally, the coder indexes the repo, builds a map,
+  sends the prompt to Bedrock, parses edits, applies them, verifies with the
+  compiler, retries if needed, and commits.
+actor: Developer using the test CLI or the orchestrator importing the library
+trigger: Caller calls coder.Run(ctx, "add a function that calculates fibonacci numbers")
+flow:
+  - F1: "Create Config with WorkDir, Model, Region, TestCmd"
+  - F2: "Call New(cfg) to get a Coder instance"
+  - F3: "Call Run(ctx, prompt)"
+  - F4: "Run indexes the repository (ScanDir + BuildSymbolTable)"
+  - F5: "Run builds the repository map (tree-sitter + PageRank)"
+  - F6: "Run constructs the LLM prompt and sends to Bedrock"
+  - F7: "Run parses the response into edits"
+  - F8: "Run applies edits (AST for .go, text for others)"
+  - F9: "Run verifies (go build, go vet, go test)"
+  - F10: "If errors, Run retries (up to MaxRetries)"
+  - F11: "Run auto-commits on success"
+  - F12: "Run returns Result with ModifiedFiles, Errors, TokensUsed, Retries, Success"
+touchpoints:
+  - T1: "pkg/coder Coder interface (prd001-coder-interface R2)"
+  - T2: "All internal packages orchestrated by internal/coder"
+success_criteria:
+  - S1: New(cfg) validates config and returns a Coder
+  - S2: Run returns a Result with ModifiedFiles listing changed files
+  - S3: Result.Success is true when edits compile and tests pass
+  - S4: Result.TokensUsed reflects actual Bedrock token consumption
+  - S5: Result.Retries reflects the number of retry iterations
+  - S6: Modified files are committed with attribution
+  - S7: The test CLI invokes the same flow via command-line flags
+out_of_scope:
+  - Multi-turn conversation
+  - Task management and issue tracking
+  - Branch creation and remote operations
+test_suite: test-rel07.0-uc001-end-to-end-coding-task
+dependencies:
+  - D1: prd001-coder-interface (Coder interface, Config, Result)
+  - D2: prd002-go-ast-engine (AST parsing and indexing)
+  - D3: prd004-edit-format (edit parsing and application)
+  - D4: prd005-llm-client (Bedrock prompt and streaming)
+  - D5: prd006-repo-map (repository map construction)
+  - D6: prd007-feedback-loop (compile, test, retry)
+  - D7: prd008-git-integration (auto-commit)

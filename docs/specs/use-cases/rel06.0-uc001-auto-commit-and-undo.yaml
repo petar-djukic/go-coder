@@ -1,0 +1,39 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: rel06.0-uc001-auto-commit-and-undo
+title: Auto-Commit Edits and Undo
+summary: |
+  After successful edits and verification, the git module commits the changes
+  with a descriptive message and attribution. Pre-existing dirty files are
+  committed separately. Undo reverts the last AI commit.
+actor: The coder orchestrator after successful verification
+trigger: Verification passes (build, vet, tests all OK)
+flow:
+  - F1: "Check for uncommitted changes (dirty files)"
+  - F2: "If dirty files exist and DirtyCommit is true, commit them separately"
+  - F3: "Stage all files modified by the agent"
+  - F4: "Generate commit message from the task prompt (conventional commits format)"
+  - F5: "Commit with Co-Authored-By trailer"
+  - F6: "For undo: identify the last go-coder commit by trailer, reset --soft HEAD~1"
+touchpoints:
+  - T1: "internal/git auto-commit (prd008-git-integration R1)"
+  - T2: "internal/git dirty handling (prd008-git-integration R2)"
+  - T3: "internal/git commit message (prd008-git-integration R3)"
+  - T4: "internal/git undo (prd008-git-integration R4)"
+success_criteria:
+  - S1: Auto-commit creates a commit with only agent-modified files
+  - S2: Commit includes Co-Authored-By trailer
+  - S3: Dirty files are committed separately before AI edits
+  - S4: Commit message follows conventional commits format
+  - S5: Undo reverts the last go-coder commit
+  - S6: Undo refuses to revert non-go-coder commits
+out_of_scope:
+  - Branch management
+  - Git push and remote operations
+  - Merge conflict resolution
+test_suite: test-rel06.0-uc001-auto-commit-and-undo
+dependencies:
+  - D1: prd008-git-integration (auto-commit, dirty handling, commit message, undo)
+  - D2: prd007-feedback-loop (verification must pass before commit)
+  - D3: prd001-coder-interface (Coder.Run orchestration contract)

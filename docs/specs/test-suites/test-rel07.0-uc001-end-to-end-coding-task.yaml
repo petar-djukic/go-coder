@@ -1,0 +1,128 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: test-rel07.0-uc001-end-to-end-coding-task
+title: End-to-end coding task execution
+description: >
+  Validates the complete coding workflow from Config creation through Run
+  execution and Result inspection. Test cases cover config validation,
+  successful edits, Result fields, retry behavior, token usage reporting,
+  and the test CLI interface.
+traces:
+  - rel07.0-uc001-end-to-end-coding-task
+tags:
+  - integration
+  - e2e
+
+preconditions:
+  - A small Go repository with a go.mod and at least one package exists in a temporary directory
+  - AWS Bedrock credentials are configured (or a mock LLM client is injected)
+  - The repository is git-initialized with at least one prior commit
+
+test_cases:
+  - name: Config validation rejects invalid config
+    description: >
+      Creating a Coder with an invalid Config (missing WorkDir or Model)
+      returns an error at construction time rather than at Run time.
+    inputs:
+      config:
+        work_dir: ""
+        model: ""
+        region: "us-east-1"
+      command: coder.New(cfg)
+    expected:
+      error_present: true
+      error_contains: "invalid config"
+      state:
+        coder_nil: true
+
+  - name: Run produces Result with modified files
+    description: >
+      A successful Run returns a Result whose ModifiedFiles list contains
+      the paths of files that the agent created or changed.
+    inputs:
+      config:
+        work_dir: /tmp/test-repo
+        model: anthropic.claude-sonnet
+        region: us-east-1
+        test_cmd: "go test ./..."
+      prompt: "add a function Fibonacci(n int) int to pkg/math/math.go"
+    expected:
+      exit_code: 0
+      state:
+        result_not_nil: true
+        modified_files_not_empty: true
+        modified_files_contain: "pkg/math/math.go"
+
+  - name: Successful edit results in Success true
+    description: >
+      When the LLM produces edits that compile, pass vet, and pass tests,
+      Result.Success is true and Result.Errors is empty.
+    inputs:
+      config:
+        work_dir: /tmp/test-repo
+        model: anthropic.claude-sonnet
+        region: us-east-1
+        test_cmd: "go test ./..."
+      prompt: "add a function Add(a, b int) int to pkg/math/math.go"
+      mock_llm_response_compiles: true
+    expected:
+      exit_code: 0
+      state:
+        success: true
+        errors_empty: true
+
+  - name: Failed edits show retry count
+    description: >
+      When the LLM produces edits that fail compilation on the first attempt
+      but succeed on the second, Result.Retries equals 1 and Result.Success
+      is true.
+    inputs:
+      config:
+        work_dir: /tmp/test-repo
+        model: anthropic.claude-sonnet
+        region: us-east-1
+        max_retries: 3
+      prompt: "refactor the handler function"
+      mock_first_response_fails: true
+      mock_second_response_succeeds: true
+    expected:
+      exit_code: 0
+      state:
+        success: true
+        retries: 1
+
+  - name: Token usage reported
+    description: >
+      After Run completes, Result.TokensUsed contains the total input and
+      output token counts from the Bedrock API responses.
+    inputs:
+      config:
+        work_dir: /tmp/test-repo
+        model: anthropic.claude-sonnet
+        region: us-east-1
+      prompt: "add a helper function"
+      mock_input_tokens: 1500
+      mock_output_tokens: 800
+    expected:
+      exit_code: 0
+      state:
+        tokens_used_gte: 2300
+        input_tokens: 1500
+        output_tokens: 800
+
+  - name: Test CLI runs the same workflow
+    description: >
+      The test CLI binary accepts --work-dir, --model, --region, --prompt,
+      and --test-cmd flags and produces the same Result output as calling
+      coder.New and coder.Run programmatically.
+    inputs:
+      command: go-coder --work-dir /tmp/test-repo --model anthropic.claude-sonnet --region us-east-1 --prompt "add a fibonacci function" --test-cmd "go test ./..."
+    expected:
+      exit_code: 0
+      stdout_contains: "Success"
+      stdout_contains: "ModifiedFiles"
+      stdout_contains: "TokensUsed"
+
+cleanup:
+  - Remove the temporary test repository and all generated files

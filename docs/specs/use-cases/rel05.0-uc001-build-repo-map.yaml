@@ -1,0 +1,38 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: rel05.0-uc001-build-repo-map
+title: Build Ranked Repository Map
+summary: |
+  The repo map module extracts symbols using tree-sitter, builds a dependency
+  graph, applies PageRank with personalization, and renders a compact map
+  within a token budget.
+actor: The coder orchestrator assembling LLM context
+trigger: Coder.Run needs repository context for the prompt
+flow:
+  - F1: "Extract symbol definitions and references using tree-sitter across all files"
+  - F2: "For Go files, prefer the native AST symbol table when available"
+  - F3: "Build a directed multigraph with files as nodes and cross-file references as edges"
+  - F4: "Apply edge weight scoring (identifier length, uniqueness)"
+  - F5: "Run PageRank with personalization biased toward task-relevant files"
+  - F6: "Select top-ranked symbols up to the token budget"
+  - F7: "Render the map as a tree of file paths with symbol signatures"
+touchpoints:
+  - T1: "internal/repomap symbol extraction (prd006-repo-map R1)"
+  - T2: "internal/repomap dependency graph (prd006-repo-map R2)"
+  - T3: "internal/repomap PageRank (prd006-repo-map R3)"
+  - T4: "internal/repomap rendering (prd006-repo-map R4)"
+success_criteria:
+  - S1: Tree-sitter extracts symbols from Go and at least one other language
+  - S2: Graph contains edges between files with cross-references
+  - S3: PageRank ranks task-relevant files higher
+  - S4: Rendered map fits within token budget
+  - S5: Cache avoids re-parsing unchanged files
+out_of_scope:
+  - LLM interaction (handled by prd005-llm-client)
+  - Edit application (handled by prd004-edit-format)
+  - Vector embeddings
+test_suite: test-rel05.0-uc001-build-repo-map
+dependencies:
+  - D1: prd006-repo-map (symbol extraction, graph, PageRank, rendering)
+  - D2: prd001-coder-interface (Coder.Run orchestration contract)

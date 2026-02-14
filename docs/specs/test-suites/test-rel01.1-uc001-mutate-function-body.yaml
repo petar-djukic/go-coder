@@ -1,0 +1,152 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: test-rel01.1-uc001-mutate-function-body
+title: AST mutation of Go function bodies
+description: >
+  Validates ReplaceFunctionBody and WriteFile across success and failure
+  scenarios, including comment preservation, gofmt compliance, atomic
+  write safety, and error handling for missing functions and invalid code.
+traces:
+  - rel01.1-uc001-mutate-function-body
+tags:
+  - ast
+  - mutation
+  - smoke
+
+preconditions:
+  - A test .go file exists with multiple functions, doc comments, inline comments, and import statements
+  - The test .go file compiles before any mutation
+
+test_cases:
+  - name: Replace function body successfully
+    description: >
+      ReplaceFunctionBody locates the named function, swaps its body with valid
+      replacement statements, and returns no error. The resulting AST contains
+      the new statements in place of the original ones.
+    inputs:
+      command: >
+        ReplaceFunctionBody(astFile, commentMap, "Add",
+          "return a + b + 1")
+    expected:
+      exit_code: 0
+      state:
+        function_name: Add
+        body_contains: "return a + b + 1"
+        original_body_absent: true
+
+  - name: Output compiles after replacement
+    description: >
+      After replacing a function body, WriteFile writes the result to disk
+      and the output file compiles with go build without errors.
+    inputs:
+      command: >
+        ReplaceFunctionBody(astFile, commentMap, "Add",
+          "return a + b + 1")
+        WriteFile(astFile, outputPath)
+        exec: go build outputPath
+    expected:
+      exit_code: 0
+      state:
+        file_exists: true
+        compiles: true
+
+  - name: Doc comments preserved on mutated function
+    description: >
+      A function with a doc comment (e.g., "// Add returns the sum") retains
+      its doc comment after body replacement. The comment text appears
+      immediately before the function declaration in the output.
+    inputs:
+      command: >
+        ReplaceFunctionBody(astFile, commentMap, "Add",
+          "return a + b + 1")
+        WriteFile(astFile, outputPath)
+    expected:
+      exit_code: 0
+      stdout_contains: "// Add returns the sum"
+      state:
+        doc_comment_attached: true
+        doc_comment_text: "// Add returns the sum"
+
+  - name: Inline comments preserved in other functions
+    description: >
+      Functions not targeted by ReplaceFunctionBody retain their inline
+      comments. A comment inside Subtract (e.g., "// subtract logic") must
+      still appear in the output.
+    inputs:
+      command: >
+        ReplaceFunctionBody(astFile, commentMap, "Add",
+          "return a + b + 1")
+        WriteFile(astFile, outputPath)
+    expected:
+      exit_code: 0
+      state:
+        other_function: Subtract
+        inline_comment_preserved: true
+        comment_text: "// subtract logic"
+
+  - name: Output is gofmt-compliant
+    description: >
+      The output of WriteFile must be identical to the result of running
+      go/format.Source on the same content. Comparing the two byte slices
+      must show zero differences.
+    inputs:
+      command: >
+        ReplaceFunctionBody(astFile, commentMap, "Add",
+          "return a + b + 1")
+        WriteFile(astFile, outputPath)
+        formatted := format.Source(readFile(outputPath))
+    expected:
+      exit_code: 0
+      state:
+        output_equals_formatted: true
+
+  - name: Error on nonexistent function name
+    description: >
+      When the target function name does not exist in the AST,
+      ReplaceFunctionBody must return an error indicating the function
+      was not found.
+    inputs:
+      command: >
+        ReplaceFunctionBody(astFile, commentMap, "DoesNotExist",
+          "return nil")
+    expected:
+      exit_code: 1
+      stderr_contains: "function not found"
+      state:
+        ast_unchanged: true
+
+  - name: Error on invalid replacement code
+    description: >
+      When the replacement code string is not valid Go (e.g., a syntax
+      error), ReplaceFunctionBody must return a parse error and must not
+      modify the AST.
+    inputs:
+      command: >
+        ReplaceFunctionBody(astFile, commentMap, "Add",
+          "return !!!invalid")
+    expected:
+      exit_code: 1
+      stderr_contains: "parse"
+      state:
+        ast_unchanged: true
+
+  - name: Atomic write does not corrupt file on error
+    description: >
+      If WriteFile encounters an error during rendering (e.g., the output
+      path is a directory or the disk is read-only), the original file on
+      disk must remain unchanged. WriteFile uses a temp-file-then-rename
+      strategy so a partial write never overwrites the original.
+    inputs:
+      command: >
+        ReplaceFunctionBody(astFile, commentMap, "Add",
+          "return a + b + 1")
+        WriteFile(astFile, "/read-only-or-invalid-path")
+    expected:
+      exit_code: 1
+      stderr_contains: "write"
+      state:
+        original_file_unchanged: true
+
+cleanup:
+  - Remove the test output directory and any temporary files

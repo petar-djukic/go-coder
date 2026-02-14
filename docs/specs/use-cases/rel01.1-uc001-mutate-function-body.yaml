@@ -1,0 +1,43 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: rel01.1-uc001-mutate-function-body
+title: Mutate Go Function Body via AST
+summary: |
+  A caller parses a Go file, replaces a function body with new code via AST
+  mutation, and writes the result back to disk. Comments are preserved, and
+  the output is gofmt-compliant.
+actor: The edit engine (internal/coder) applying LLM-generated edits to Go files
+trigger: An Edit struct targeting a Go file is passed to the AST applier
+flow:
+  - F1: "Parse the target .go file into *ast.File with parser.ParseComments mode"
+  - F2: "Build an ast.CommentMap to track comment attachment before mutation"
+  - F3: "Locate the target function declaration by name in the AST"
+  - F4: "Parse the replacement code string into AST statements"
+  - F5: "Replace the function body's statement list with the new statements"
+  - F6: "Re-attach comments using the CommentMap so doc and inline comments survive"
+  - F7: "Write the mutated AST back to disk using go/format.Node with atomic write (temp file then rename)"
+  - F8: "Verify the output compiles with go build"
+touchpoints:
+  - T1: "internal/ast ReplaceFunctionBody: locates function, parses replacement, swaps body (prd002-ast-engine R3.1, R3.2, R3.3, R3.4)"
+  - T2: "internal/ast WriteFile: renders AST to disk with atomic write (prd002-ast-engine R4.1, R4.2, R4.3, R4.4)"
+  - T3: "internal/ast comment preservation: CommentMap build and re-attach (prd002-ast-engine R5.1, R5.2, R5.3, R5.4)"
+success_criteria:
+  - S1: ReplaceFunctionBody replaces the correct function and the output compiles
+  - S2: Doc comments on the function remain attached after mutation
+  - S3: Inline comments within the file are preserved
+  - S4: Output is gofmt-compliant
+  - S5: Atomic write prevents file corruption on failure
+  - S6: Error returned when function name not found
+  - S7: Error returned when replacement code is invalid Go
+out_of_scope:
+  - Multi-file edits across packages
+  - Editing non-Go files
+  - Tree-sitter integration
+test_suite: test-rel01.1-uc001-mutate-function-body
+dependencies:
+  - D1: prd002-ast-engine (AST mutation and write-back requirements)
+  - D2: rel01.0-uc001-parse-and-index (parsing and symbol table must work before mutation)
+references:
+  - prd002-ast-engine
+  - docs/ARCHITECTURE.md

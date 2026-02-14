@@ -1,0 +1,64 @@
+id: prd004-edit-format
+title: Edit Format Parser
+problem: |
+  The LLM produces code edits as structured text blocks within its natural
+  language response. We need a parser that extracts these edit instructions
+  from the response text and routes them to the appropriate edit engine
+  (AST for Go files, text for everything else). The parser must handle
+  malformed blocks gracefully and report parsing failures so the feedback
+  loop can ask the LLM to try again.
+goals:
+  - G1: Parse search/replace blocks from LLM response text
+  - G2: Parse whole-file blocks for file creation
+  - G3: Route parsed edits to the correct engine based on file type
+  - G4: Handle malformed or incomplete blocks with clear error reporting
+requirements:
+  R1:
+    title: Search/Replace Block Parsing
+    items:
+      - R1.1: The parser must recognize blocks delimited by <<<<<<< SEARCH, =======, and >>>>>>> REPLACE markers
+      - R1.2: The file path must appear on the line immediately before the <<<<<<< SEARCH marker
+      - R1.3: The parser must extract the search text (between SEARCH and =======) and replacement text (between ======= and REPLACE)
+      - R1.4: Multiple edit blocks in a single response must all be extracted in order
+      - R1.5: The parser must handle blocks wrapped in markdown fenced code blocks (triple backtick wrappers)
+      - R1.6: Empty replacement text must be valid (it means delete the matched content)
+      - R1.7: Empty search text with non-empty replacement must be treated as an append operation
+  R2:
+    title: Whole-File Block Parsing
+    items:
+      - R2.1: The parser must recognize whole-file blocks where the file path is followed by a fenced code block containing the entire file content
+      - R2.2: Whole-file blocks for files that do not yet exist must be marked as file creation (IsCreate=true on the Edit)
+      - R2.3: Whole-file blocks for existing files must be treated as full file replacement
+  R3:
+    title: Edit Routing
+    items:
+      - R3.1: After parsing, edits must be classified by file extension
+      - R3.2: Files ending in .go must be routed to the AST engine
+      - R3.3: All other files must be routed to the text edit engine
+      - R3.4: The router must apply edits in the order they appear in the LLM response
+      - R3.5: If one edit fails, the router must continue applying remaining edits and collect all errors
+  R4:
+    title: Error Handling
+    items:
+      - R4.1: Malformed blocks (missing markers, unclosed blocks) must produce a ParseError with the block position and what was expected
+      - R4.2: The parser must not silently skip malformed blocks; every block attempt must produce either an Edit or a ParseError
+      - R4.3: ParseErrors must include the raw text of the malformed block so the feedback loop can show it to the LLM
+      - R4.4: When zero edits are found in a response, the parser must return a specific NoEditsFound error
+  R5:
+    title: Response Metadata
+    items:
+      - R5.1: The parser must separate reasoning text (natural language) from edit blocks
+      - R5.2: The reasoning text must be preserved and returned alongside the edits for logging
+      - R5.3: The parser must count the number of edit blocks found vs successfully parsed
+non_goals:
+  - This PRD does not define unified diff or patch format parsing (search/replace is the only format for now)
+  - This PRD does not define the prompt template that instructs the LLM how to format edits (that is part of prd005-llm-client)
+  - This PRD does not define how edits are applied (that is prd002 for AST and prd003 for text)
+acceptance_criteria:
+  - Parser extracts search/replace blocks from a sample LLM response
+  - Parser handles multiple blocks in one response
+  - Parser handles blocks wrapped in markdown fences
+  - Parser produces correct Edit structs with file path, old content, new content
+  - Malformed blocks produce ParseError with position and raw text
+  - Empty response produces NoEditsFound error
+  - Edits are routed to correct engine based on .go extension

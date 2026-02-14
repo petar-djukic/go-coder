@@ -1,0 +1,41 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: rel04.0-uc001-compile-test-retry
+title: Compile, Test, and Retry on Failure
+summary: |
+  After edits are applied, the feedback loop runs go build, go vet, and the test
+  command. If errors occur, they are formatted into a follow-up prompt and sent
+  back to the LLM. The cycle repeats up to MaxRetries times.
+actor: The coder orchestrator after applying edits
+trigger: Edits have been applied to disk
+flow:
+  - F1: "Run go build ./... and capture output"
+  - F2: "If build succeeds, run go vet ./..."
+  - F3: "If vet succeeds and TestCmd is configured, run the test command"
+  - F4: "If any step fails, parse errors into CompileError structs"
+  - F5: "Format errors with file context (5 lines above/below) into a follow-up prompt"
+  - F6: "Send the error prompt to the LLM for correction"
+  - F7: "Parse and apply the correction edits"
+  - F8: "Repeat verification until success or MaxRetries exhausted"
+touchpoints:
+  - T1: "internal/feedback verifier (prd007-feedback-loop R1, R2)"
+  - T2: "internal/feedback error formatting (prd007-feedback-loop R3)"
+  - T3: "internal/feedback retry loop (prd007-feedback-loop R4)"
+success_criteria:
+  - S1: Build errors are detected and parsed into CompileError structs
+  - S2: Vet warnings are captured
+  - S3: Test failures are detected by non-zero exit code
+  - S4: Error formatting includes file context around error lines
+  - S5: Retry loop stops on success
+  - S6: Retry loop stops after MaxRetries
+  - S7: Context cancellation terminates the loop
+out_of_scope:
+  - Edit application details (handled by prd004-edit-format)
+  - LLM interaction details (handled by prd005-llm-client)
+  - Git commit (handled by prd008-git-integration)
+test_suite: test-rel04.0-uc001-compile-test-retry
+dependencies:
+  - D1: prd007-feedback-loop (verifier, error formatting, retry loop)
+  - D2: prd004-edit-format (edit parsing for correction responses)
+  - D3: prd005-llm-client (sending error prompts to the LLM)

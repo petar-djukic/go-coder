@@ -1,0 +1,38 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: rel01.0-uc001-parse-and-index
+title: Parse and Index a Go Repository
+summary: |
+  A caller invokes the file scanner on a Go repository. The scanner walks
+  the directory tree, parses all .go files into ASTs in parallel, and builds
+  a symbol table. The caller queries the symbol table by name, file, and kind.
+actor: Developer or orchestrator invoking the go-coder library
+trigger: Caller calls ScanDir and BuildSymbolTable on a repository path
+flow:
+  - F1: "Call ScanDir with the repository root path and concurrency limit"
+  - F2: "ScanDir walks the tree, skipping vendor/, .git/, testdata/, respecting .gitignore"
+  - F3: "Worker pool parses each .go file into *ast.File using parser.ParseComments"
+  - F4: "ScanDir returns a map of file paths to parsed ASTs, plus any parse errors"
+  - F5: "Call BuildSymbolTable with the parsed AST map"
+  - F6: "BuildSymbolTable extracts functions, structs, interfaces, methods, variables, constants"
+  - F7: "Query the symbol table by name, by file, and by kind"
+touchpoints:
+  - T1: "internal/ast ScanDir (prd002-ast-engine R1)"
+  - T2: "internal/ast BuildSymbolTable (prd002-ast-engine R2)"
+  - T3: "pkg/types Symbol and SymbolKind (prd001-coder-interface R5)"
+success_criteria:
+  - S1: ScanDir finds all .go files and skips vendor/, .git/, testdata/
+  - S2: Parse errors for individual files are collected, not fatal
+  - S3: BuildSymbolTable extracts all symbol kinds from test fixtures
+  - S4: Lookup by name returns correct symbols
+  - S5: Lookup by file returns all symbols in that file
+  - S6: Lookup by kind filters correctly
+out_of_scope:
+  - AST mutation (see rel01.1-uc001-mutate-function-body)
+  - Non-Go files
+  - Tree-sitter integration (see prd006-repo-map)
+test_suite: test-rel01.0-uc001-parse-and-index
+dependencies:
+  - D1: prd002-ast-engine (File Scanner and Symbol Table requirements)
+  - D2: prd001-coder-interface (Symbol and SymbolKind shared types)
