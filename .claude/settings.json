@@ -3,7 +3,8 @@
     "allow": [
       "Bash(bd show:*)",
       "Bash(export PATH=\"$HOME/go/bin:$PATH\")",
-      "Bash(bd init:*)"
+      "Bash(bd init:*)",
+      "Bash(find:*)"
     ]
   }
 }
