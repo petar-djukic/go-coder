@@ -1,0 +1,85 @@
+id: ts002-comparative-conformance-baseline
+title: Comparative Conformance Baseline Test Suite
+
+purpose: |
+  Verify that runtime behavior conforms to the comparative baseline requirements
+  defined in PRD021.
+
+scope:
+  requirements:
+    - prd021-comparative-agent-conformance-baseline
+
+test_groups:
+  - id: TG1
+    name: Runtime authority boundaries
+    checks:
+      - verify runtime remains authoritative for permission and execution decisions
+      - verify model cannot directly execute tools without runtime approval
+      - verify retry budget enforcement is runtime-owned
+  - id: TG2
+    name: Prompt system baseline
+    checks:
+      - verify prompt sections include role, context, tool policy, output format, recovery, and verification
+      - verify mode overlays do not relax safety boundaries
+      - verify bounded memory and summary injection behavior
+  - id: TG3
+    name: Parsing and malformed output recovery
+    checks:
+      - verify provider-native structured calls are supported
+      - verify parser-constrained text mode is supported
+      - verify malformed outputs trigger structured correction feedback and capped re-query behavior
+  - id: TG4
+    name: Dynamic tool exposure
+    checks:
+      - verify tool projection is per-turn and policy aware
+      - verify projected set changes with mode, capability, and session context
+      - verify descriptors include stable names and machine-readable schemas
+  - id: TG5
+    name: File edit lifecycle and safety
+    checks:
+      - verify discovery/read-before-edit sequencing
+      - verify targeted edit, patch, and write paths are supported
+      - verify mutation failures are deterministic and policy-compliant
+  - id: TG6
+    name: Verification and terminal-state guardrails
+    checks:
+      - verify post-mutation validation executes when configured
+      - verify diagnostics outcomes feed subsequent loop decisions
+      - verify unresolved critical failures block terminal success
+  - id: TG7
+    name: Comparative scoring metrics
+    checks:
+      - verify first-pass correctness and repair-turn count metrics are emitted
+      - verify tool misuse rate and validation pass rate metrics are emitted
+      - verify diff minimality and policy-compliance metrics are emitted
+
+success_criteria:
+  - All conformance test groups pass for configured runtime profile.
+  - Failure evidence includes deterministic reason codes and trace links.
+  - Metrics outputs are complete for correctness, misuse, verification, and diff quality.
+
+traceability:
+  requirements:
+    - prd021-comparative-agent-conformance-baseline:R1.1
+    - prd021-comparative-agent-conformance-baseline:R1.2
+    - prd021-comparative-agent-conformance-baseline:R1.3
+    - prd021-comparative-agent-conformance-baseline:R2.1
+    - prd021-comparative-agent-conformance-baseline:R2.2
+    - prd021-comparative-agent-conformance-baseline:R2.3
+    - prd021-comparative-agent-conformance-baseline:R3.1
+    - prd021-comparative-agent-conformance-baseline:R3.2
+    - prd021-comparative-agent-conformance-baseline:R3.3
+    - prd021-comparative-agent-conformance-baseline:R4.1
+    - prd021-comparative-agent-conformance-baseline:R4.2
+    - prd021-comparative-agent-conformance-baseline:R4.3
+    - prd021-comparative-agent-conformance-baseline:R5.1
+    - prd021-comparative-agent-conformance-baseline:R5.2
+    - prd021-comparative-agent-conformance-baseline:R5.3
+    - prd021-comparative-agent-conformance-baseline:R6.1
+    - prd021-comparative-agent-conformance-baseline:R6.2
+    - prd021-comparative-agent-conformance-baseline:R6.3
+    - prd021-comparative-agent-conformance-baseline:R7.1
+    - prd021-comparative-agent-conformance-baseline:R7.2
+    - prd021-comparative-agent-conformance-baseline:R8.1
+    - prd021-comparative-agent-conformance-baseline:R8.2
+    - prd021-comparative-agent-conformance-baseline:R8.3

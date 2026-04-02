@@ -1,0 +1,73 @@
+id: prd006-stitch-essential-toolset
+title: Stitch Essential Toolset and Boundaries
+
+problem: |
+  Stitch runtime needs a minimal, safe, and deterministic tool surface for
+  specification-to-code generation. Without a constrained toolset and explicit
+  boundaries, runtime responsibilities can overlap orchestrator concerns and
+  increase failure risk.
+
+goals:
+  - G1: Define the out-of-the-gate essential tool inventory.
+  - G2: Define stable tool contracts and naming for orchestrator integration.
+  - G3: Enforce orchestrator-runtime separation of concerns.
+  - G4: Define baseline safety and audit requirements for all essential tools.
+
+requirements:
+  R1:
+    title: Essential Tool Inventory
+    items:
+    - R1.1: Runtime must provide llm.generate for model completion in the internal loop.
+    - R1.2: Runtime must provide find_files and find_text for codebase discovery and content lookup.
+    - R1.3: Runtime must provide read_file for bounded content retrieval.
+    - R1.4: Runtime must provide edit_file and write_file for deterministic code mutation.
+    - R1.5: Runtime must provide build_target and get_errors for validation execution.
+    - R1.6: Runtime must provide ask_user for requesting human or agent guidance on ambiguous decisions.
+  R2:
+    title: Tool Contract Stability
+    items:
+    - R2.1: Each essential tool must have a versioned descriptor with required inputs, outputs, and error codes.
+    - R2.2: Tool names must be stable across releases for orchestrator compatibility.
+    - R2.3: Essential tools must produce structured machine-readable results in addition to human-readable summaries.
+  R3:
+    title: Orchestrator Boundary
+    items:
+    - R3.1: Runtime must not expose git branch, commit, push, or merge operations as essential tools.
+    - R3.2: Runtime must treat environment preparation and tool configuration as orchestrator preconditions.
+    - R3.3: Runtime must reject invocation of unconfigured or disallowed tools with structured rejection codes.
+  R4:
+    title: Safety Baseline
+    items:
+    - R4.1: Mutation tools must enforce workspace path boundaries.
+    - R4.2: Mutation tools must return deterministic failure without partial writes on validation failure.
+    - R4.3: build_target must enforce target allowlist policy.
+  R5:
+    title: Audit and Observability
+    items:
+    - R5.1: Every tool invocation attempt must generate a correlated crumb record.
+    - R5.2: Tool result payloads must include status and normalized error metadata when failed.
+    - R5.3: Tool events must include assignment id, trail id, and call id when available.
+non_goals:
+  - Define git workflow operations inside stitch runtime.
+  - Define multi-agent orchestration behavior inside stitch runtime.
+  - Define MCP integration as a release-1 requirement.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Essential inventory includes llm.generate, find_files, find_text, read_file, edit_file, write_file, build_target, get_errors, and ask_user.
+    traces: [R1.1, R1.2, R1.3, R1.4, R1.5, R1.6]
+  - id: AC2
+    criterion: All essential tools publish versioned descriptors with stable names and structured outputs.
+    traces: [R2.1, R2.2, R2.3]
+  - id: AC3
+    criterion: Runtime rejects unconfigured tools and does not expose git lifecycle tools.
+    traces: [R3.1, R3.2, R3.3]
+  - id: AC4
+    criterion: Mutation tools enforce workspace boundaries and deterministic no-partial-write behavior.
+    traces: [R4.1, R4.2]
+  - id: AC5
+    criterion: build_target target allowlist enforcement is implemented.
+    traces: [R4.3]
+  - id: AC6
+    criterion: Every tool call is auditable with correlated crumb and normalized failure metadata.
+    traces: [R5.1, R5.2, R5.3]

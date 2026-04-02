@@ -1,0 +1,77 @@
+id: if005-validation-port
+title: Validation Port Contract
+component: ValidationPort
+
+purpose: |
+  Define the outbound port contract for build and verification execution via mage
+  targets and diagnostics retrieval.
+
+operations:
+  - name: build_target
+    input:
+      required:
+        - target
+      fields:
+        target:
+          type: string
+        timeout_ms:
+          type: integer
+          optional: true
+    output:
+      required:
+        - status
+        - exit_code
+      fields:
+        status:
+          type: string
+          allowed: [succeeded, failed, timed_out, canceled, rejected]
+        exit_code:
+          type: integer
+        duration_ms:
+          type: integer
+        stdout_summary:
+          type: string
+          optional: true
+        stderr_summary:
+          type: string
+          optional: true
+
+  - name: get_errors
+    input:
+      fields:
+        paths:
+          type: array
+          items: string
+          optional: true
+    output:
+      required:
+        - diagnostics
+      fields:
+        diagnostics:
+          type: array
+          items:
+            type: object
+            required: [path, severity, message]
+
+error_codes:
+  - target_not_allowlisted
+  - task_failed
+  - task_timeout
+  - diagnostics_unavailable
+
+acceptance_checks:
+  - id: IF5-AC1
+    check: build_target rejects non-allowlisted targets.
+  - id: IF5-AC2
+    check: build_target reports deterministic status and exit code.
+  - id: IF5-AC3
+    check: get_errors supports both workspace and path-scoped requests.
+
+traceability:
+  requirements:
+    - prd006-stitch-essential-toolset:R1.5
+    - prd008-mage-task-execution-and-diagnostics:R1.1
+    - prd008-mage-task-execution-and-diagnostics:R1.2
+    - prd008-mage-task-execution-and-diagnostics:R1.3
+    - prd008-mage-task-execution-and-diagnostics:R4.1
+    - prd008-mage-task-execution-and-diagnostics:R4.2

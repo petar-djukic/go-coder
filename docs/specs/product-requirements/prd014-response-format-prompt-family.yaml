@@ -1,0 +1,34 @@
+id: prd014-response-format-prompt-family
+title: Response Format Prompt Family
+problem: |
+  Tool-loop orchestration requires parseable and unambiguous model outputs.
+  Loose response formats cause routing errors and failed tool execution.
+
+goals:
+  - G1: Define strict output formats for actionable and terminal responses.
+  - G2: Ensure parser compatibility across loop turns.
+  - G3: Minimize ambiguous or mixed-format outputs.
+
+requirements:
+  R1:
+    title: Output Shapes
+    items:
+    - R1.1: Prompt must define exact response shapes for terminal and actionable branches.
+    - R1.2: Prompt must require fields needed by ToolCallInterpreter and ModelResponseRouter.
+    - R1.3: Prompt must prohibit mixed natural-language and tool-call fragments in a single incompatible shape.
+  R2:
+    title: Deterministic Parsing
+    items:
+    - R2.1: Prompt must provide valid format examples for each allowed shape.
+    - R2.2: Prompt must include correction instruction for malformed outputs.
+non_goals:
+  - Define UI rendering of responses.
+  - Define provider-specific JSON mode behavior.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Response format prompts define unambiguous terminal and actionable output contracts.
+    traces: [R1.1, R1.2, R1.3]
+  - id: AC2
+    criterion: Prompt includes valid examples and malformed-output correction path.
+    traces: [R2.1, R2.2]

@@ -1,0 +1,47 @@
+id: if006-state-and-audit-ports
+title: State and Audit Ports Contract
+component: StateAuditPorts
+
+purpose: |
+  Define outbound port contracts for trail state lookup, stash resolution, and
+  crumb persistence used by core services.
+
+ports:
+  - name: TrailStatePort
+    operations:
+      - get_trail
+      - transition_trail_state
+  - name: StashResolutionPort
+    operations:
+      - resolve_stash
+      - get_tool_policy
+  - name: CrumbLedgerPort
+    operations:
+      - write_crumb
+      - query_crumbs
+
+requirements:
+  - All operations must return structured status and normalized error codes.
+  - All writes must include call id and trail id correlation metadata.
+
+error_codes:
+  - trail_not_found
+  - invalid_transition
+  - stash_not_found
+  - crumb_write_failed
+
+acceptance_checks:
+  - id: IF6-AC1
+    check: trail transition operations enforce state machine constraints.
+  - id: IF6-AC2
+    check: stash resolution failures return deterministic rejection metadata.
+  - id: IF6-AC3
+    check: crumb writes include call and trail correlation ids.
+
+traceability:
+  requirements:
+    - prd002-trail-lifecycle-state-machine:R1.1
+    - prd002-trail-lifecycle-state-machine:R2.4
+    - prd003-tool-stash-availability:R2.1
+    - prd003-tool-stash-availability:R3.4
+    - prd001-tool-system-components-interfaces:R5.2

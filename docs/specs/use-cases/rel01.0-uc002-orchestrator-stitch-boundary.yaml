@@ -1,0 +1,36 @@
+id: rel01.0-uc002-orchestrator-stitch-boundary
+title: Orchestrator Stitch Boundary
+summary: |
+  The orchestrator prepares an assignment envelope and invokes the stitch runtime.
+  The runtime executes the assignment, produces a result envelope, and returns it
+  to the orchestrator without performing git operations.
+actor: External orchestrator (cobbler-scaffold)
+trigger: Orchestrator picks a ready task and creates an assignment envelope for stitch execution
+flow:
+  - F1: "Orchestrator prepares assignment envelope with trail_id, specification references, workspace path, and execution budget"
+  - F2: "Orchestrator sends AgentInvokeRequest with prompt and assignment metadata to StitchBoundaryAdapter"
+  - F3: "StitchBoundaryAdapter validates assignment envelope and initializes runtime execution context"
+  - F4: "StitchBoundaryAdapter delegates to AgentLoopOrchestrator with prompt and trail reference"
+  - F5: "AgentLoopOrchestrator runs the agentic loop (see uc001) until terminal response"
+  - F6: "StitchBoundaryAdapter packages execution summary into AgentInvokeResponse"
+  - F7: "StitchBoundaryAdapter returns result envelope to orchestrator"
+  - F8: "Error — invalid assignment envelope: reject with structured error before loop starts"
+  - F9: "Error — loop execution fails: return partial result with error metadata"
+touchpoints:
+  - T1: "StitchBoundaryAdapter — assignment validation and result packaging (prd001-tool-system-components-interfaces R1, R4)"
+  - T2: "AgentLoopOrchestrator — loop execution delegation (prd002-trail-lifecycle-state-machine R3)"
+  - T3: "CrumbLedger — execution summary extraction (prd001-tool-system-components-interfaces R5)"
+success_criteria:
+  - id: S1
+    criterion: A valid assignment envelope produces a structured AgentInvokeResponse with status and execution summary
+    traces:
+      - prd001-tool-system-components-interfaces AC4
+  - id: S2
+    criterion: An invalid assignment envelope is rejected before the agentic loop starts
+    traces:
+      - prd001-tool-system-components-interfaces AC1
+  - id: S3
+    criterion: The stitch runtime performs no git operations; branch management belongs to the orchestrator
+    traces:
+      - prd001-tool-system-components-interfaces AC6
+test_suite: test-rel01.0

@@ -1,0 +1,42 @@
+id: prd020-safety-permissions-prompt-family
+title: Safety and Permissions Prompt Family
+problem: |
+  Stitch executes tools with real workspace effects. Safety and permissions
+  prompts are required to prevent prohibited or irreversible actions.
+
+goals:
+  - G1: Enforce permission boundaries from orchestrator policy.
+  - G2: Require caution for destructive or irreversible operations.
+  - G3: Align safety guidance with secure engineering defaults.
+
+requirements:
+  R1:
+    title: Permission Enforcement
+    items:
+    - R1.1: Prompt must require compliance with allowlisted tools and denied operations.
+    - R1.2: Prompt must require explicit rejection path for blocked actions.
+    - R1.3: Prompt must classify read-only vs mutating operations before execution when required.
+  R2:
+    title: Risk Controls
+    items:
+    - R2.1: Prompt must require confirmation behavior for destructive or irreversible actions.
+    - R2.2: Prompt must discourage risky git and filesystem operations not explicitly requested.
+  R3:
+    title: Security Hygiene
+    items:
+    - R3.1: Prompt must prohibit exposing or logging secrets.
+    - R3.2: Prompt must enforce least-privilege behavior in tool usage.
+non_goals:
+  - Define organization-level legal policy.
+  - Define endpoint authentication protocol implementation.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Safety prompts enforce allowlist constraints, blocked-action rejection, and operation classification.
+    traces: [R1.1, R1.2, R1.3]
+  - id: AC2
+    criterion: Prompt risk controls cover destructive actions and unsupported risky operations.
+    traces: [R2.1, R2.2]
+  - id: AC3
+    criterion: Prompt security hygiene prohibits secret exposure and enforces least privilege.
+    traces: [R3.1, R3.2]

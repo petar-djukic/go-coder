@@ -1,0 +1,41 @@
+id: prd017-error-recovery-prompt-family
+title: Error Recovery Prompt Family
+problem: |
+  Failures in tool calls, API requests, or formatting are inevitable. Stitch
+  needs recovery prompts that drive corrective actions instead of repeated failure loops.
+
+goals:
+  - G1: Define deterministic corrective behavior after failures.
+  - G2: Prevent repeated identical failing actions.
+  - G3: Keep essential flows progressing when optional dependencies fail.
+
+requirements:
+  R1:
+    title: Failure Diagnosis
+    items:
+    - R1.1: Prompt must require explicit classification of failure type and likely root cause.
+    - R1.2: Prompt must require one corrective next action with updated parameters or context.
+  R2:
+    title: Retry Discipline
+    items:
+    - R2.1: Prompt must prohibit identical retry without a material change.
+    - R2.2: Prompt must require fallback path when primary approach fails repeatedly.
+  R3:
+    title: Degradation Policy
+    items:
+    - R3.1: Prompt must allow optional subsystem stubbing/skipping when it unblocks essential progress.
+    - R3.2: Prompt must require explicit reporting of degraded behavior and remaining risk.
+non_goals:
+  - Define provider-specific retry backoff formulas.
+  - Define orchestrator-level incident response process.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Recovery prompts require failure classification and a concrete corrected next action.
+    traces: [R1.1, R1.2]
+  - id: AC2
+    criterion: Retry policy blocks identical retries and enforces fallback behavior.
+    traces: [R2.1, R2.2]
+  - id: AC3
+    criterion: Prompt supports controlled degradation with explicit risk reporting.
+    traces: [R3.1, R3.2]

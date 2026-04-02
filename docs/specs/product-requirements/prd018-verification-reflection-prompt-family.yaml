@@ -1,0 +1,41 @@
+id: prd018-verification-reflection-prompt-family
+title: Verification and Reflection Prompt Family
+problem: |
+  Stitch needs explicit verification prompts to ensure outputs are validated
+  against requirements and execution remains reliable.
+
+goals:
+  - G1: Define required post-change validation behavior.
+  - G2: Ensure failures are surfaced with actionable diagnostics.
+  - G3: Prevent false completion when verification is skipped.
+
+requirements:
+  R1:
+    title: Validation Requirements
+    items:
+    - R1.1: Prompt must require running relevant checks after code changes when available.
+    - R1.2: Prompt must focus remediation on issues introduced by changed files unless broader fixes are explicitly requested.
+  R2:
+    title: Reflection and Reporting
+    items:
+    - R2.1: Prompt must require explicit pass/fail reporting for validation steps.
+    - R2.2: Prompt must require statement of unverified areas when checks cannot run.
+  R3:
+    title: Reliability Guardrails
+    items:
+    - R3.1: Prompt must require graceful failure behavior and no unhandled crashes.
+    - R3.2: Prompt must block final completion claims when critical verification remains unresolved.
+non_goals:
+  - Define CI pipeline configuration.
+  - Define full regression strategy beyond task-scoped validation.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Verification prompts enforce relevant post-change checks and scoped remediation.
+    traces: [R1.1, R1.2]
+  - id: AC2
+    criterion: Reflection prompts require explicit verification outcomes and unverified-area disclosure.
+    traces: [R2.1, R2.2]
+  - id: AC3
+    criterion: Reliability constraints prevent false completion under unresolved critical checks.
+    traces: [R3.1, R3.2]

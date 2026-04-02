@@ -1,0 +1,78 @@
+id: prd023-fuzzy-match-file-editing
+title: Fuzzy-Match File Editing
+
+problem: |
+  LLMs sometimes produce old_string values that are slightly wrong: trailing
+  whitespace, indentation differences, or minor formatting shifts. When exact
+  match fails, the agent currently stops and asks the model to retry. A fuzzy
+  fallback using diff-match-patch can recover from near-misses without a full
+  round-trip, reducing token spend and latency. This tier adds an optional
+  fuzzy matching layer using github.com/sergi/go-diff (the Go port of Google
+  diff-match-patch). It activates only when exact match returns edit_no_match,
+  never when the match is ambiguous.
+
+goals:
+  - G1: Define a fuzzy fallback strategy that activates only after exact-match failure.
+  - G2: Define match quality thresholds and timeout bounds.
+  - G3: Define confidence reporting so the loop can decide whether to accept a fuzzy edit.
+  - G4: Define the single external dependency and its integration surface.
+
+requirements:
+  R1:
+    title: Fallback Activation
+    items:
+    - R1.1: Fuzzy matching must activate only when exact match returns edit_no_match.
+    - R1.2: Fuzzy matching must not activate on edit_ambiguous_match (multiple exact matches).
+    - R1.3: Fuzzy matching must be gated by a configuration flag (fuzzy_edit_enabled) that defaults to false.
+    - R1.4: When fuzzy matching is disabled, edit_file must behave identically to prd022 exact-match semantics.
+  R2:
+    title: Algorithm and Thresholds
+    items:
+    - R2.1: Fuzzy matching must use diff-match-patch Match_Threshold set to 0.95 (95 percent similarity).
+    - R2.2: Match_Distance must be configurable with a default of 500 characters.
+    - R2.3: Diff_Timeout must be configurable with a default of 5 seconds.
+    - R2.4: If no patch within threshold is found, the tool must return edit_no_match as if fuzzy was not attempted.
+  R3:
+    title: Confidence and Reporting
+    items:
+    - R3.1: Fuzzy match results must include a similarity score (0.0 to 1.0) in the tool output.
+    - R3.2: Fuzzy match results must include the actual matched text so the loop can verify the intent.
+    - R3.3: The tool result must indicate whether the edit was exact or fuzzy so the loop can log the distinction.
+  R4:
+    title: Dependency Management
+    items:
+    - R4.1: The sole external dependency is github.com/sergi/go-diff (diffmatchpatch package).
+    - R4.2: The fuzzy matching adapter must be behind the WorkspaceMutationPort interface so it can be swapped or removed without core changes.
+    - R4.3: Tests must cover the fuzzy adapter independently from the exact-match path.
+  R5:
+    title: Atomic Write and Safety
+    items:
+    - R5.1: Fuzzy edits must use the same temp-file-and-rename atomic write as exact edits (prd022 R2.1).
+    - R5.2: Fuzzy edits must enforce the same workspace path boundaries as exact edits (prd022 R3.1).
+    - R5.3: Every fuzzy edit invocation must emit a crumb record that includes the similarity score.
+
+non_goals:
+  - Multi-tier fallback chains beyond exact and fuzzy (aider-style git cherry-pick, relative indentation).
+  - AST-aware or tree-sitter matching.
+  - Automatic retry with progressively lower thresholds.
+  - Fuzzy matching for write_file operations.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Fuzzy matching activates only on edit_no_match and only when fuzzy_edit_enabled is true.
+    traces: [R1.1, R1.2, R1.3, R1.4]
+  - id: AC2
+    criterion: diff-match-patch Match_Threshold is 0.95 and Diff_Timeout is 5 seconds by default, both configurable.
+    traces: [R2.1, R2.2, R2.3]
+  - id: AC3
+    criterion: Fuzzy results below threshold return edit_no_match with no file modification.
+    traces: [R2.4]
+  - id: AC4
+    criterion: Successful fuzzy results include similarity score, matched text, and exact-vs-fuzzy indicator.
+    traces: [R3.1, R3.2, R3.3]
+  - id: AC5
+    criterion: The sole external dependency is github.com/sergi/go-diff with the adapter behind WorkspaceMutationPort.
+    traces: [R4.1, R4.2, R4.3]
+  - id: AC6
+    criterion: Fuzzy edits use atomic write, enforce workspace boundaries, and emit crumb records with similarity scores.
+    traces: [R5.1, R5.2, R5.3]

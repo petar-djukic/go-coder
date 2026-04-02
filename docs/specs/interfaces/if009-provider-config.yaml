@@ -1,0 +1,176 @@
+id: if009-provider-config
+title: LLM Provider Configuration Port
+component: LLMToolAdapter
+
+purpose: |
+  Define the provider abstraction for Ollama and AWS Bedrock. The agent is a
+  library invoked by the cobbler orchestrator. Provider selection and
+  credentials are configured before invocation, not at runtime.
+
+  Credentials are read from a file path specified in configuration. The agent
+  never prompts for credentials.
+
+dependencies:
+  - LLMToolAdapter
+
+types:
+  ProviderType:
+    type: string
+    allowed:
+      - ollama
+      - bedrock
+
+  OllamaConfig:
+    required:
+      - endpoint
+      - model
+    fields:
+      endpoint:
+        type: string
+        description: Ollama API base URL. Example "http://localhost:11434".
+      model:
+        type: string
+        description: Model name. Example "llama3.2", "qwen2.5-coder:32b".
+      context_window:
+        type: integer
+        description: Max tokens the model supports. Used for budget tracking.
+        default: 128000
+
+  BedrockConfig:
+    required:
+      - region
+      - model_id
+      - credentials_file
+    fields:
+      region:
+        type: string
+        description: AWS region. Example "us-east-1".
+      model_id:
+        type: string
+        description: Bedrock model ID. Example "anthropic.claude-sonnet-4-20250514".
+      credentials_file:
+        type: string
+        description: Path to AWS credentials file.
+      profile:
+        type: string
+        optional: true
+        description: AWS profile name within the credentials file.
+      context_window:
+        type: integer
+        description: Max tokens the model supports.
+        default: 200000
+
+  ProviderConfig:
+    required:
+      - provider
+    fields:
+      provider:
+        type: ProviderType
+      ollama:
+        type: OllamaConfig
+        optional: true
+        description: Required when provider is "ollama".
+      bedrock:
+        type: BedrockConfig
+        optional: true
+        description: Required when provider is "bedrock".
+
+operations:
+  - name: load_config
+    input:
+      type: object
+      required:
+        - config_path
+      fields:
+        config_path:
+          type: string
+    output: ProviderConfig
+    behavior:
+      - Read provider configuration from the given file path.
+      - Validate that the provider-specific section is present.
+      - Validate credentials file exists (bedrock) or endpoint responds (ollama).
+
+  - name: create_client
+    input: ProviderConfig
+    output:
+      type: object
+      description: Provider-specific HTTP client ready for chat completions.
+    behavior:
+      - For ollama, create an HTTP client pointing at the endpoint.
+      - For bedrock, load AWS credentials and create a Bedrock runtime client.
+      - Both clients implement the same chat completion interface used by LLMToolAdapter.
+
+  - name: send_chat
+    input:
+      type: object
+      required:
+        - messages
+        - tools
+      fields:
+        messages:
+          type: array
+          description: Message history in the if007 Message format.
+        tools:
+          type: array
+          description: Tool schemas from if008 (non-internal tools only).
+        temperature:
+          type: number
+          optional: true
+          default: 0
+        max_tokens:
+          type: integer
+          optional: true
+    output:
+      type: object
+      fields:
+        text:
+          type: string
+        tool_calls:
+          type: array
+          description: ToolCallIntent objects per if001.
+        usage:
+          type: object
+          fields:
+            input_tokens:
+              type: integer
+            output_tokens:
+              type: integer
+    behavior:
+      - Convert messages to provider wire format (Ollama /api/chat or Bedrock InvokeModel).
+      - Convert tools to provider tool format.
+      - Send request and parse response.
+      - Normalize tool calls into ToolCallIntent (parsed JSON arguments per if001).
+      - Return text, tool_calls, and token usage.
+
+error_codes:
+  - provider_config_invalid
+  - credentials_file_not_found
+  - provider_unreachable
+  - model_not_available
+  - provider_rate_limited
+  - provider_response_invalid
+
+acceptance_checks:
+  - id: IF9-AC1
+    check: |
+      load_config reads provider type and provider-specific fields from YAML.
+      Missing required fields produce provider_config_invalid.
+  - id: IF9-AC2
+    check: |
+      send_chat with ollama provider sends POST to /api/chat with tools
+      array and returns parsed tool_calls with JSON object arguments.
+  - id: IF9-AC3
+    check: |
+      send_chat with bedrock provider sends InvokeModel with toolConfig
+      and returns parsed tool_calls with JSON object arguments.
+  - id: IF9-AC4
+    check: |
+      Token usage (input_tokens, output_tokens) is populated on every
+      successful response for context budget tracking.
+
+traceability:
+  requirements:
+    - prd001-tool-system-components-interfaces:R2.3
+    - prd004-tool-invocation-validation:R1.1
+  use_cases:
+    - rel01.0-uc001-agentic-loop-core

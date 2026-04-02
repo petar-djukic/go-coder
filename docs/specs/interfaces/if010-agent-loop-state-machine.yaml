@@ -1,0 +1,711 @@
+id: if010-agent-loop-state-machine
+title: Agent Loop State Machine
+component: AgentLoopOrchestrator
+
+purpose: |
+  Define the state machine for the LLM-tool interaction loop that drives
+  code generation. The loop runs inside a trail that branches_from a crumb
+  in the orchestrator's workflow trail. Each turn consists of one LLM call
+  followed by execution of all returned tool calls. The loop terminates on
+  explicit conditions and reports its outcome via the trail state and a
+  result crumb.
+
+  The loop does not decide what to do about failures. It reports them.
+  The orchestrator reads the trail state and result crumb from the cupboard
+  and decides the next action (retry with different spec, break down work,
+  give up).
+
+dependencies:
+  - LLMToolAdapter
+  - ToolRegistry
+  - WorkspaceMutationPort
+  - MessageHistory (if007)
+  - CrumbLedger (if006)
+
+types:
+  LoopConfig:
+    description: Configuration provided by the orchestrator at loop start.
+    required:
+      - assignment_id
+      - system_prompt
+      - specification
+      - provider
+      - model
+      - context_budget
+      - max_turns
+      - tool_schemas
+    fields:
+      assignment_id:
+        type: string
+        description: Orchestrator assignment ID for correlation.
+      system_prompt:
+        type: string
+      specification:
+        type: string
+        description: The specification payload. Becomes the first user message.
+      provider:
+        type: string
+        description: Provider name (ollama, bedrock).
+      model:
+        type: string
+      context_budget:
+        type: integer
+        description: Max tokens for the model context window.
+      max_turns:
+        type: integer
+        description: |
+          Maximum number of turns before the loop terminates. A turn is one
+          LLM call plus execution of all returned tool calls. The orchestrator
+          sets this based on task complexity.
+      tool_schemas:
+        type: array
+        items: ToolSchema
+        description: |
+          Tool definitions sent to the LLM so it knows what it can call.
+          Each schema has name, description, and inputSchema (JSON Schema).
+      convergence_config:
+        type: ConvergenceConfig
+        optional: true
+        description: |
+          Convergence detection thresholds. When omitted or when
+          enabled=false, convergence detection is disabled.
+
+  ToolSchema:
+    description: |
+      Describes a tool to the LLM. Sent in the provider request so the model
+      knows what tools are available and their parameter shapes. This is the
+      tool-as-described-to-the-LLM structure. Distinct from ToolCallIntent
+      (the LLM's request to invoke a tool) and ToolResult (the tool's response).
+    required:
+      - name
+      - description
+      - input_schema
+    fields:
+      name:
+        type: string
+      description:
+        type: string
+      input_schema:
+        type: object
+        description: JSON Schema object defining the tool's parameters.
+
+  ToolResult:
+    description: |
+      The output of executing a tool call. Appended to the message history
+      as a tool-role message linked by call_id.
+    required:
+      - call_id
+      - tool_name
+      - content
+      - is_error
+    fields:
+      call_id:
+        type: string
+        description: Matches the id from ToolCallIntent.
+      tool_name:
+        type: string
+      content:
+        type: string
+        description: Tool output text. Truncated if it exceeds tool output budget.
+      is_error:
+        type: boolean
+        description: |
+          True when the tool execution failed. The error content is still
+          appended to history so the LLM can see what went wrong and decide
+          whether to retry, try a different approach, or give up.
+
+  FinishReason:
+    type: string
+    allowed:
+      - end_turn
+      - tool_calls
+      - length
+      - content_filter
+      - error
+    description: |
+      Provider finish reason mapped to canonical values. end_turn means the
+      model chose to stop (text-only response, no tool calls). tool_calls
+      means the model wants to invoke tools. length means the response was
+      truncated by token limits. content_filter and error are failure modes.
+
+  LoopExitReason:
+    type: string
+    allowed:
+      - completed
+      - max_turns_exceeded
+      - budget_exceeded
+      - llm_failed
+      - context_length_exceeded
+      - progress_stalled
+    description: |
+      Why the loop stopped. Written to the result crumb. progress_stalled
+      indicates the convergence detector determined the LLM is making
+      insufficient progress (tiny edits, repeated errors, declining output).
+
+  LoopResult:
+    description: |
+      Written as the final crumb in the loop trail. The orchestrator reads
+      this from the cupboard to determine what happened.
+    required:
+      - exit_reason
+      - turns_used
+      - tokens_used
+      - context_budget
+      - max_turns
+    fields:
+      exit_reason:
+        type: LoopExitReason
+      turns_used:
+        type: integer
+      tokens_used:
+        type: integer
+      context_budget:
+        type: integer
+      max_turns:
+        type: integer
+      last_assistant_text:
+        type: string
+        optional: true
+        description: |
+          The text content of the last assistant message. When exit_reason
+          is completed, this is the model's final output. When it is a
+          failure, this may contain the model's last partial response.
+      error_detail:
+        type: string
+        optional: true
+        description: Details when exit_reason is llm_failed.
+      convergence_detail:
+        type: string
+        optional: true
+        description: |
+          Details when exit_reason is progress_stalled. Contains the
+          metric window that triggered detection and the slope values.
+      statistics:
+        type: LoopStatistics
+        description: |
+          Always present. Aggregate statistics computed from all TurnMetrics
+          collected during the loop. Reported regardless of convergence config.
+      turn_metrics:
+        type: array
+        items: TurnMetrics
+        optional: true
+        description: |
+          Full per-turn metrics history. Included when the orchestrator or
+          operator needs detailed per-turn visibility. May be omitted for
+          compact result payloads.
+
+  LoopStatistics:
+    description: |
+      Aggregate statistics computed from all TurnMetrics. Always included
+      in LoopResult regardless of convergence configuration. Gives the
+      orchestrator a summary of loop productivity.
+    required:
+      - total_lines_changed
+      - total_mutations
+      - total_errors
+      - total_turns
+    fields:
+      total_lines_changed:
+        type: integer
+      total_mutations:
+        type: integer
+      total_errors:
+        type: integer
+      total_turns:
+        type: integer
+      avg_lines_per_mutation_turn:
+        type: float
+        description: |
+          Mean lines_changed across turns that had at least one mutation.
+          Zero when no mutations occurred.
+      read_to_mutate_ratio:
+        type: float
+        description: |
+          Total read_count / total mutation_count. Infinity when no
+          mutations occurred (represented as -1 in serialization).
+      validation_to_mutate_ratio:
+        type: float
+        description: |
+          Total validation_count / total mutation_count. Indicates how
+          much build/test cycling happened relative to code changes.
+      blind_write_count:
+        type: integer
+        description: |
+          Sum of files_created_without_read across all turns.
+
+  TurnMetrics:
+    description: |
+      Per-turn measurements collected after every turn regardless of
+      convergence config. Used for always-on loop statistics and optional
+      degradation detection.
+    required:
+      - turn_number
+      - lines_changed
+      - tool_call_count
+      - mutation_count
+      - error_count
+      - read_count
+      - validation_count
+      - files_created_without_read
+    fields:
+      turn_number:
+        type: integer
+      lines_changed:
+        type: integer
+        description: |
+          Total lines added + removed across all edit_file and write_file
+          calls in this turn. Computed from the diff metadata returned by
+          mutation tools.
+      tool_call_count:
+        type: integer
+        description: Number of tool calls the LLM requested in this turn.
+      mutation_count:
+        type: integer
+        description: |
+          Number of file-mutating tool calls (edit_file, write_file) in
+          this turn. A turn with many tool calls but zero mutations is
+          a read-only exploration turn, not necessarily degraded.
+      error_count:
+        type: integer
+        description: |
+          Number of tool results with is_error=true in this turn. High
+          error rates across consecutive turns indicate thrashing.
+      output_tokens:
+        type: integer
+        description: |
+          Tokens in the LLM response for this turn. A sharp drop in
+          output tokens correlates with the model losing confidence.
+      read_count:
+        type: integer
+        description: |
+          Number of read-only tool calls (find_files, find_text, read_file)
+          in this turn. High read_count with zero mutation_count across
+          consecutive turns indicates the model is exploring but not acting.
+      validation_count:
+        type: integer
+        description: |
+          Number of validation tool calls (build_target, get_errors) in
+          this turn. High validation_count relative to mutation_count means
+          the model is running build/test far more than writing code.
+      files_created_without_read:
+        type: integer
+        description: |
+          Count of write_file calls in this turn where the target path was
+          not previously read (via read_file) or discovered (via find_files)
+          in this turn or the preceding 2 turns. Indicates the model is
+          creating files blindly without understanding existing structure.
+
+  ConvergenceConfig:
+    description: |
+      Configuration for convergence detection. The orchestrator provides
+      these thresholds in LoopConfig. Metrics are always collected regardless
+      of this config. When enabled=false (default), metrics feed statistics
+      only — no early termination.
+    fields:
+      window_size:
+        type: integer
+        default: 5
+        description: |
+          Number of recent turns to consider for signal analysis. Must
+          be >= 3. Smaller windows react faster but are noisier.
+      min_lines_per_turn:
+        type: integer
+        default: 3
+        description: |
+          declining_edits signal: when the average lines_changed over the
+          window drops below this threshold, check the slope.
+      slope_threshold:
+        type: float
+        default: -0.5
+        description: |
+          declining_edits signal: negative slope of lines_changed over
+          the window that triggers a stall. Slope is computed via linear
+          regression on the window. A value of -0.5 means the model is
+          producing roughly half a line less per turn.
+      max_consecutive_error_turns:
+        type: integer
+        default: 3
+        description: |
+          error_streak signal: number of consecutive turns where
+          error_count > 0 that triggers a stall.
+      max_readonly_turns:
+        type: integer
+        default: 4
+        description: |
+          read_only_spinning signal: number of consecutive turns with
+          mutation_count=0 and read_count>0 that triggers a stall. The
+          model is exploring but never writing code.
+      max_blind_writes:
+        type: integer
+        default: 3
+        description: |
+          blind_creation signal: maximum files_created_without_read
+          within the window before flagging. The model is creating files
+          without understanding the existing codebase.
+      max_validation_ratio:
+        type: float
+        default: 5.0
+        description: |
+          validation_heavy signal: when validation_count / mutation_count
+          over the window exceeds this ratio. A value of 5.0 means >5
+          validation calls per mutation call. Indicates build/test cycling.
+      enabled:
+        type: boolean
+        default: false
+        description: |
+          Controls early termination only. When false, metrics are still
+          collected and statistics still reported in LoopResult. When true,
+          signals that cross thresholds trigger progress_stalled exit.
+
+trail_model:
+  description: |
+    The loop runs inside its own crumbs trail. This trail branches_from a
+    crumb in the orchestrator's workflow trail via the branches_from link
+    type. The branch-point crumb is the assignment crumb created by the
+    orchestrator.
+
+    Trail lifecycle:
+    1. Orchestrator creates an assignment crumb in its workflow trail.
+    2. Loop creates a new trail with a branches_from link to the assignment crumb.
+    3. Trail transitions to active. Crumbs are appended as messages.
+    4. On loop exit: trail transitions to completed (success) or abandoned (failure).
+    5. Completed cascades crumbs to pebble. Abandoned cascades crumbs to dust.
+    6. Orchestrator queries the loop trail state and reads the result crumb.
+
+  crumb_mapping:
+    - role: system
+      crumb_type: message
+      description: System prompt. First crumb in the trail.
+    - role: user
+      crumb_type: message
+      description: Specification payload. Second crumb.
+    - role: assistant
+      crumb_type: message
+      description: |
+        LLM response. Contains text parts and zero or more tool_call parts.
+        All tool calls from one LLM response are parts of one crumb.
+    - role: tool
+      crumb_type: message
+      description: |
+        Tool execution result. One crumb per tool call. Linked to the
+        assistant crumb's tool_call by call_id.
+    - role: result
+      crumb_type: loop_result
+      description: |
+        Final crumb. Contains LoopResult with exit reason and metrics.
+        The orchestrator reads this to determine outcome.
+
+  token_tracking:
+    description: |
+      Token usage is tracked as a stash scoped_to the loop trail. The stash
+      holds running totals (input_tokens, output_tokens, total_tokens) and
+      is updated after each LLM response using the provider's usage field.
+      For outbound messages (user, tool results), token count is estimated
+      at 4 characters per token. The stash is archived when the trail
+      completes or is abandoned.
+
+operations:
+  - name: start_loop
+    input: LoopConfig
+    output: void
+    behavior:
+      - Create a new crumbs trail.
+      - Create a branches_from link from the new trail to the assignment crumb.
+      - Create a stash scoped_to the trail for token tracking.
+      - Transition trail to active.
+      - Initialize message history (if007 create_session).
+      - Enter the turn loop.
+
+  - name: execute_turn
+    input: void
+    output: FinishReason
+    behavior:
+      - Call to_provider_messages (if007) to build the full message array.
+      - Send messages plus tool_schemas to the LLM via invoke_provider_async (if001).
+      - On LLM success with tool_calls in response:
+        - Append assistant message (if007 append_assistant) with text and tool_call parts.
+        - For each tool_call in order, execute the tool and append the result (if007 append_tool_result).
+        - Tool execution errors are appended as is_error=true results. The LLM sees the error and decides.
+        - Return finish_reason=tool_calls.
+      - On LLM success with no tool_calls (text-only):
+        - Append assistant message with text only.
+        - Return finish_reason=end_turn.
+      - On LLM failure (after if001 retries are exhausted):
+        - Return finish_reason=error.
+      - On LLM response truncated (finish_reason=length from provider):
+        - Append the partial assistant message.
+        - Return finish_reason=length.
+      - Update token tracking stash with provider usage metrics.
+
+  - name: check_termination
+    input:
+      type: object
+      required:
+        - finish_reason
+        - turns_used
+      fields:
+        finish_reason:
+          type: FinishReason
+        turns_used:
+          type: integer
+    output: LoopExitReason
+    behavior:
+      - If finish_reason is end_turn, return completed.
+      - If finish_reason is error, return llm_failed.
+      - If finish_reason is length, return context_length_exceeded.
+      - If turns_used >= max_turns, return max_turns_exceeded.
+      - If message history total_tokens >= context_budget, return budget_exceeded.
+      - Call check_convergence. If it returns progress_stalled, return progress_stalled.
+      - Otherwise return null (continue looping).
+
+  - name: collect_turn_metrics
+    input:
+      type: object
+      required:
+        - turn_number
+        - tool_results
+      fields:
+        turn_number:
+          type: integer
+        tool_results:
+          type: array
+          items: ToolResult
+        output_tokens:
+          type: integer
+    output: TurnMetrics
+    behavior:
+      - Count lines_changed by summing additions + removals from edit_file
+        and write_file tool results (from output_metadata.additions and
+        output_metadata.removals). write_file counts total lines as additions.
+      - Count tool_call_count as len(tool_results).
+      - Count mutation_count as the number of tool results where tool_name
+        is edit_file or write_file.
+      - Count error_count as the number of tool results with is_error=true.
+      - Count read_count as the number of tool results where tool_name is
+        find_files, find_text, or read_file.
+      - Count validation_count as the number of tool results where tool_name
+        is build_target or get_errors.
+      - Compute files_created_without_read: for each write_file tool result,
+        check whether the target path appeared in any read_file or find_files
+        result in this turn or the preceding 2 turns. Count those that did not.
+      - Set output_tokens from the LLM response usage field.
+      - Append the TurnMetrics to the metrics list (always, regardless of
+        convergence config). The list grows for the full loop lifetime.
+      - Called by execute_turn after all tool results are collected.
+
+  - name: compute_statistics
+    input: void
+    output: LoopStatistics
+    behavior:
+      - Iterate all collected TurnMetrics.
+      - Sum total_lines_changed, total_mutations, total_errors, total_turns.
+      - Compute avg_lines_per_mutation_turn as mean of lines_changed across
+        turns where mutation_count > 0. Zero if no mutations.
+      - Compute read_to_mutate_ratio as sum(read_count) / sum(mutation_count).
+        Use -1 when mutation_count is zero.
+      - Compute validation_to_mutate_ratio as sum(validation_count) /
+        sum(mutation_count). Use -1 when mutation_count is zero.
+      - Sum blind_write_count from files_created_without_read.
+      - Called by exit_loop before writing the result crumb.
+
+  - name: check_convergence
+    input: void
+    output: LoopExitReason
+    behavior:
+      - If convergence_config is nil or enabled=false, return null.
+      - If collected metrics have fewer than window_size entries, return null.
+      - Extract the last window_size TurnMetrics entries as the window.
+      - Signal declining_edits:
+        - Compute avg_lines = mean(lines_changed) over the window.
+        - If avg_lines < min_lines_per_turn:
+          - Compute slope via least-squares linear regression on lines_changed.
+          - If slope <= slope_threshold, return progress_stalled with
+            signal=declining_edits.
+      - Signal error_streak:
+        - Count consecutive turns from the tail of the window where
+          error_count > 0.
+        - If count >= max_consecutive_error_turns, return progress_stalled
+          with signal=error_streak.
+      - Signal read_only_spinning:
+        - Count consecutive turns from the tail of the window where
+          mutation_count=0 and read_count>0.
+        - If count >= max_readonly_turns, return progress_stalled with
+          signal=read_only_spinning.
+      - Signal blind_creation:
+        - Sum files_created_without_read over the window.
+        - If sum > max_blind_writes, return progress_stalled with
+          signal=blind_creation.
+      - Signal validation_heavy:
+        - Sum validation_count and mutation_count over the window.
+        - If mutation_count > 0 and validation_count/mutation_count >
+          max_validation_ratio, return progress_stalled with
+          signal=validation_heavy.
+      - Otherwise return null (continue looping).
+
+  - name: exit_loop
+    input:
+      type: object
+      required:
+        - exit_reason
+      fields:
+        exit_reason:
+          type: LoopExitReason
+    output: void
+    behavior:
+      - Call compute_statistics to build LoopStatistics from all TurnMetrics.
+      - Write a result crumb (LoopResult) to the trail including statistics.
+      - If exit_reason is completed, call trail.Complete() (crumbs -> pebble).
+      - If exit_reason is any failure, call trail.Abandon() (crumbs -> dust).
+      - The orchestrator reads the trail state and result crumb from the cupboard.
+
+turn_definition: |
+  A turn is one LLM call plus execution of all tool calls returned in that
+  response. If the LLM returns 3 tool calls, that is one turn with 3 tool
+  executions, not 3 turns. The turn counter increments once per LLM invocation.
+
+  Tool calls within a turn are executed sequentially in the order they appear
+  in the LLM response. All results must be appended to history before the
+  next turn begins (if007 IF7-AC6).
+
+llm_error_handling: |
+  Retry and backoff are handled inside the LLM adapter (if001). The adapter
+  has max_retries and retry_backoff_ms configuration. When retries are
+  exhausted, the adapter returns status=failed with error.retryable=false.
+  The loop receives this as finish_reason=error and terminates with
+  exit_reason=llm_failed.
+
+  The loop does not retry LLM calls. The adapter does. The loop does not
+  decide what to do about LLM failures. The orchestrator does.
+
+tool_error_handling: |
+  When a tool execution fails (exception, timeout, validation error), the
+  result is appended to history with is_error=true and the error description
+  as content. The LLM sees the error in the next turn and decides: retry the
+  tool call, try a different approach, or report a blocker.
+
+  Tool errors do NOT terminate the loop. Only LLM errors, budget exhaustion,
+  max turns, and the LLM's own decision to stop (end_turn) terminate the loop.
+
+orchestrator_communication: |
+  The loop runs in its own goroutine. The orchestrator does not block waiting
+  for the loop to finish. Communication is through the crumbs cupboard:
+
+  1. Orchestrator creates assignment crumb in its workflow trail.
+  2. Loop creates its trail with branches_from link. Orchestrator can
+     query this link to find the loop trail.
+  3. Loop writes message crumbs as it progresses. Orchestrator can
+     poll trail crumbs for progress visibility.
+  4. Loop writes result crumb and transitions trail to completed/abandoned.
+  5. Orchestrator queries trail state. completed = success.
+     abandoned = read result crumb for exit_reason and decide next action.
+
+convergence_detection: |
+  LLMs can enter degraded states during multi-turn coding loops. Observed
+  patterns include: emitting 1-2 line edits with build/test after each one,
+  creating files without reading the codebase first, spinning on read-only
+  exploration without making changes, and cycling between edits that undo
+  each other. No existing coding agent (as of 2026-04) detects these — they
+  rely entirely on hard limits (max_turns, token budgets).
+
+  Metrics are always collected (prd024 R1). Statistics are always reported
+  in LoopResult (prd024 R2). Degradation signals only trigger early
+  termination when convergence_config.enabled=true (prd024 R4).
+
+  Five degradation signals:
+
+  1. declining_edits — lines_changed dropping via slope analysis. The LLM
+     is making tinier and tinier edits per turn without recovery.
+
+  2. error_streak — consecutive turns with tool errors. The LLM is stuck
+     in a fix-fail cycle.
+
+  3. read_only_spinning — consecutive turns with reads but zero mutations.
+     The LLM is exploring but never committing to changes.
+
+  4. blind_creation — write_file calls without prior read_file or find_files
+     for that path. The LLM is guessing file structure rather than reading.
+
+  5. validation_heavy — high build_target/get_errors calls relative to
+     mutations. The LLM is running build/test far more than writing code.
+
+  When any signal fires, the loop exits with progress_stalled. The
+  orchestrator receives this in the LoopResult and decides: retry with a
+  different strategy, break the task into smaller pieces, or escalate via
+  ask_user. The detector does NOT change the LLM's behavior — it only
+  observes and terminates. The orchestrator owns recovery.
+
+error_codes:
+  - trail_creation_failed
+  - tool_dispatch_failed
+  - unknown_tool_name
+  - context_length_exceeded
+  - max_turns_exceeded
+  - budget_exceeded
+  - llm_failed
+  - progress_stalled
+
+acceptance_checks:
+  - id: IF10-AC1
+    check: |
+      Loop creates a trail with branches_from link to the orchestrator's
+      assignment crumb. Trail transitions to active before first LLM call.
+  - id: IF10-AC2
+    check: |
+      Each turn consists of one LLM call followed by sequential execution
+      of all returned tool calls. Turn counter increments once per LLM call.
+  - id: IF10-AC3
+    check: |
+      Tool execution errors are appended as is_error=true results. Tool
+      errors do not terminate the loop.
+  - id: IF10-AC4
+    check: |
+      Loop terminates on end_turn (completed), max_turns exceeded,
+      budget exceeded, context_length exceeded, or LLM failure.
+  - id: IF10-AC5
+    check: |
+      On exit, a result crumb with LoopResult is written. Trail transitions
+      to completed (success) or abandoned (failure). Crumbs cascade
+      to pebble or dust respectively.
+  - id: IF10-AC6
+    check: |
+      Token usage is tracked in a trail-scoped stash. Updated after each
+      LLM response from the provider usage field.
+  - id: IF10-AC7
+    check: |
+      The orchestrator can discover the loop trail via branches_from link
+      and read progress via trail crumbs and final state.
+  - id: IF10-AC8
+    check: |
+      TurnMetrics are collected after every turn with accurate
+      lines_changed, mutation_count, error_count, read_count,
+      validation_count, and files_created_without_read values.
+  - id: IF10-AC9
+    check: |
+      When convergence is enabled and any of the five degradation signals
+      fires (declining_edits, error_streak, read_only_spinning,
+      blind_creation, validation_heavy), the loop exits with
+      progress_stalled and convergence_detail identifying the signal.
+  - id: IF10-AC10
+    check: |
+      When convergence detection is disabled (enabled=false or config
+      omitted), metrics are still collected and LoopStatistics still
+      reported. Only early termination is suppressed.
+  - id: IF10-AC11
+    check: |
+      LoopResult always includes LoopStatistics with aggregate metrics
+      (total_lines_changed, avg_lines_per_mutation_turn, read_to_mutate_ratio,
+      validation_to_mutate_ratio, blind_write_count).
+
+traceability:
+  requirements:
+    - prd001-tool-system-components-interfaces:R4.1
+    - prd002-trail-lifecycle-state-machine:R1.1
+    - prd002-trail-lifecycle-state-machine:R2.1
+    - prd004-tool-invocation-validation:R1.1
+    - prd024-llm-degradation-detection:R1.1
+    - prd024-llm-degradation-detection:R2.1
+    - prd024-llm-degradation-detection:R3.1
+    - prd024-llm-degradation-detection:R4.2
+    - prd024-llm-degradation-detection:R5.1
+  use_cases:
+    - rel01.0-uc001-agentic-loop-core

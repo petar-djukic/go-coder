@@ -1,0 +1,294 @@
+id: if007-message-history
+title: Message History Port
+component: AgentLoopOrchestrator
+
+purpose: |
+  Define the conversation history contract for the agentic loop. The loop runs
+  inside a trail that branches_from an assignment crumb in the orchestrator's
+  workflow trail (see if010). Each turn (LLM call + tool execution) appends
+  messages as crumbs to this loop trail. The LLM provider receives the full
+  message list on every call.
+
+  Message history is persisted using the crumbs infrastructure: one trail per
+  loop invocation, one crumb per message. Crumbs use belongs_to links to the
+  loop trail. Token usage is tracked in a stash scoped_to the trail. When the
+  loop completes, the trail transitions to completed (crumbs cascade to pebble).
+  When the loop fails, the trail is abandoned (crumbs cascade to dust). The
+  orchestrator observes outcome by querying the trail state via the cupboard.
+
+dependencies:
+  - CrumbLedger
+  - LLMToolAdapter
+
+types:
+  MessageRole:
+    type: string
+    allowed:
+      - system
+      - user
+      - assistant
+      - tool
+
+  MessageContent:
+    description: |
+      Polymorphic content part. Each message holds one or more content parts.
+      Modelled after the MCP/OpenAI content union: text, tool_call, tool_result.
+    variants:
+      - type: text
+        fields:
+          text:
+            type: string
+      - type: tool_call
+        fields:
+          call_id:
+            type: string
+          tool_name:
+            type: string
+          arguments:
+            type: object
+            description: Parsed JSON object (guaranteed valid by LLM boundary).
+      - type: tool_result
+        fields:
+          call_id:
+            type: string
+          tool_name:
+            type: string
+          content:
+            type: string
+            description: Tool output text.
+          is_error:
+            type: boolean
+
+  Message:
+    description: |
+      A single conversation turn. Stored as a crumb in the generation trail.
+      The crumb property bag carries the serialized message payload. Messages
+      form a linked list via crumb ordering within the trail.
+    required:
+      - id
+      - role
+      - parts
+      - created_at
+    fields:
+      id:
+        type: string
+        description: Crumb ID from the cupboard. Unique within the trail.
+      role:
+        type: MessageRole
+      parts:
+        type: array
+        items: MessageContent
+        description: |
+          One or more content parts. An assistant message may contain both
+          text and one or more tool_call parts. The LLM returns tool calls
+          as a list; all calls from one response become parts of a single
+          assistant message. A tool message contains exactly one tool_result.
+      model:
+        type: string
+        optional: true
+        description: Model ID that produced this message (assistant messages only).
+      created_at:
+        type: integer
+        description: Unix timestamp in milliseconds.
+      token_count:
+        type: integer
+        optional: true
+        description: |
+          Approximate token count for this message. Used for context budget
+          tracking. Populated after LLM response for assistant messages,
+          estimated for user and tool messages.
+
+  MessageHistory:
+    description: |
+      Ordered list of all messages in the current generation session. Backed
+      by a crumbs trail. The trail is created when the orchestrator delivers
+      the specification and completed when code is produced.
+    required:
+      - trail_id
+      - messages
+    fields:
+      trail_id:
+        type: string
+        description: Crumbs trail ID for this generation session.
+      messages:
+        type: array
+        items: Message
+      total_tokens:
+        type: integer
+        description: Running sum of token_count across all messages.
+      context_budget:
+        type: integer
+        description: |
+          Maximum tokens the provider supports for this model. When
+          total_tokens exceeds context_budget, the session should end
+          and the orchestrator should break down the specification.
+
+operations:
+  - name: create_session
+    input:
+      type: object
+      required:
+        - assignment_id
+        - system_prompt
+        - specification
+        - context_budget
+      fields:
+        assignment_id:
+          type: string
+          description: Orchestrator assignment ID for correlation.
+        system_prompt:
+          type: string
+          description: |
+            System prompt text provided by the cobbler orchestrator.
+            Configurable per generation.
+        specification:
+          type: string
+          description: |
+            The specification payload from the orchestrator. Becomes the
+            first user message in the history.
+        context_budget:
+          type: integer
+          description: Max tokens for the provider model.
+    output: MessageHistory
+    behavior:
+      - Create a new crumbs trail for this generation session.
+      - Append the system prompt as the first message (role=system).
+      - Append the specification as the second message (role=user).
+      - Return the initialized history with two messages.
+
+  - name: append_assistant
+    input:
+      type: object
+      required:
+        - history
+        - parts
+        - model
+      fields:
+        history:
+          type: MessageHistory
+        parts:
+          type: array
+          items: MessageContent
+        model:
+          type: string
+        token_count:
+          type: integer
+          optional: true
+    output: MessageHistory
+    behavior:
+      - Create a crumb in the trail with role=assistant and the given parts.
+      - Update total_tokens.
+      - Return the updated history.
+
+  - name: append_tool_result
+    input:
+      type: object
+      required:
+        - history
+        - call_id
+        - tool_name
+        - content
+        - is_error
+      fields:
+        history:
+          type: MessageHistory
+        call_id:
+          type: string
+          description: Must match a call_id from a tool_call part in the preceding assistant message.
+        tool_name:
+          type: string
+        content:
+          type: string
+        is_error:
+          type: boolean
+    output: MessageHistory
+    behavior:
+      - Create a crumb in the trail with role=tool and one tool_result part.
+      - Estimate token count from content length.
+      - Update total_tokens.
+      - If total_tokens exceeds context_budget, set an over_budget flag.
+      - Return the updated history.
+    constraints:
+      - |
+        Every tool_call part in the preceding assistant message must have
+        a corresponding append_tool_result call before to_provider_messages
+        is called again. Provider APIs reject incomplete tool result sets.
+      - |
+        Results are appended in the order tool calls were executed. The
+        order must match the tool_call order in the assistant message
+        because the provider expects result messages to follow sequentially.
+
+  - name: to_provider_messages
+    input:
+      type: object
+      required:
+        - history
+      fields:
+        history:
+          type: MessageHistory
+    output:
+      type: array
+      items: Message
+    behavior:
+      - Return all messages in trail order for the LLM provider call.
+      - Provider adapter converts these to wire format (Ollama/Bedrock).
+
+  - name: complete_session
+    input:
+      type: object
+      required:
+        - history
+        - status
+      fields:
+        history:
+          type: MessageHistory
+        status:
+          type: string
+          allowed:
+            - completed
+            - abandoned
+    output: void
+    behavior:
+      - Mark the crumbs trail as completed or abandoned.
+      - Persist final token usage metadata.
+
+error_codes:
+  - context_budget_exceeded
+  - trail_creation_failed
+  - crumb_write_failed
+
+acceptance_checks:
+  - id: IF7-AC1
+    check: |
+      Session creates a crumbs trail and appends system prompt and specification
+      as the first two messages.
+  - id: IF7-AC2
+    check: |
+      Each assistant and tool message is persisted as a crumb in the trail.
+      Messages are recoverable from the cupboard after session completion.
+  - id: IF7-AC3
+    check: |
+      to_provider_messages returns messages in insertion order matching the
+      linked-list traversal of crumbs within the trail.
+  - id: IF7-AC4
+    check: |
+      When total_tokens exceeds context_budget, the session signals over_budget
+      rather than silently truncating or compacting messages.
+  - id: IF7-AC5
+    check: |
+      An assistant message may contain multiple tool_call parts from a single
+      LLM response. All tool_call parts are stored in one message, not split
+      across multiple assistant messages.
+  - id: IF7-AC6
+    check: |
+      Every tool_call part in an assistant message has a matching tool result
+      message (by call_id) appended before to_provider_messages is called.
+      Calling to_provider_messages with incomplete results is an error.
+
+traceability:
+  requirements:
+    - prd002-trail-lifecycle-state-machine:R1.1
+    - prd002-trail-lifecycle-state-machine:R2.1
+    - prd019-memory-summary-prompt-family:R1.1
+  use_cases:
+    - rel01.0-uc001-agentic-loop-core

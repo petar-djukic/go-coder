@@ -1,0 +1,331 @@
+id: prompt-extraction-and-taxonomy
+title: Open Source Prompt Extraction and Categorization
+status: draft
+
+scope: |
+  Extract and categorize prompt patterns from dropped open-source coding agents,
+  then derive practical prompt templates for stitch runtime.
+
+notes:
+  - Excerpts are intentionally short and normalized.
+  - Full source prompts remain in referenced files.
+  - Orchestrator owns multi-agent and git lifecycle; stitch prompts avoid those responsibilities.
+
+source_inventory:
+  - repo: coding-agent-b
+    files:
+      - coding-agent-b/src/constants/prompts.ts
+      - coding-agent-b/src/tools/FileEditTool/prompt.ts
+      - coding-agent-b/src/tools/GlobTool/prompt.ts
+      - coding-agent-b/src/tools/GrepTool/prompt.ts
+      - coding-agent-b/src/tools/BashTool/prompt.ts
+      - coding-agent-b/prompts/07-tool-system.md
+      - coding-agent-b/prompts/09-query-engine.md
+      - coding-agent-b/prompts/10-context-and-prompts.md
+      - coding-agent-b/src/services/compact/prompt.ts
+  - repo: coding-agent-c
+    files:
+      - coding-agent-c/aider/prompts.py
+      - coding-agent-c/aider/coders/base_prompts.py
+      - coding-agent-c/aider/coders/editblock_prompts.py
+  - repo: coding-agent-d
+    files:
+      - coding-agent-d/crates/goose/src/prompts/system.md
+      - coding-agent-d/crates/goose/src/prompts/plan.md
+      - coding-agent-d/crates/goose/src/prompts/subagent_system.md
+      - coding-agent-d/crates/goose/src/prompts/permission_judge.md
+      - coding-agent-d/crates/goose/src/prompts/compaction.md
+      - coding-agent-d/crates/goose/src/prompts/apps_create.md
+      - coding-agent-d/CONTRIBUTING_RECIPES.md
+  - repo: coding-agent-f
+    files:
+      - coding-agent-f/config/default.yaml
+      - coding-agent-f/config/sweagent_0_7/07.yaml
+  - repo: coding-agent-g
+    files:
+      - coding-agent-g/internal/llm/prompt/coder.go
+      - coding-agent-g/internal/llm/prompt/task.go
+
+taxonomy:
+  - id: C1
+    name: system_behavior
+    description: Role, boundaries, coding principles, and high-level operating constraints.
+  - id: C2
+    name: context_injection
+    description: Runtime and task context sections injected per turn.
+  - id: C3
+    name: tool_policy
+    description: Tool usage preferences, tool-specific constraints, and invocation policy.
+  - id: C4
+    name: response_format
+    description: Required output formats for parser compatibility and action routing.
+  - id: C5
+    name: editing_protocol
+    description: File edit formats and safety rules for deterministic code mutation.
+  - id: C6
+    name: planning_and_decomposition
+    description: Planner prompts, step construction, and clarifying-question fallback.
+  - id: C7
+    name: error_recovery
+    description: Retry and correction behavior after malformed outputs or failed operations.
+  - id: C8
+    name: verification_and_reflection
+    description: Validate outputs against checks and specs before completion.
+  - id: C9
+    name: memory_and_summary
+    description: Compaction, summarization, and memory continuity prompts.
+  - id: C10
+    name: safety_permissions
+    description: Permission boundaries, risky action checks, and policy reminders.
+
+extracted_prompts:
+  - id: E001
+    category: C1
+    source: coding-agent-b/src/constants/prompts.ts
+    normalized_excerpt: |
+      You are an interactive agent that helps users with software engineering tasks.
+      Use provided tools and follow strict task boundaries.
+  - id: E002
+    category: C3
+    source: coding-agent-b/src/tools/GrepTool/prompt.ts
+    normalized_excerpt: |
+      Always use the dedicated grep tool for search tasks.
+      Avoid shell grep/rg when a tool exists.
+  - id: E003
+    category: C5
+    source: coding-agent-b/src/tools/FileEditTool/prompt.ts
+    normalized_excerpt: |
+      Read file before editing and preserve exact indentation.
+      Edits fail when old text is not unique.
+  - id: E004
+    category: C10
+    source: coding-agent-b/src/tools/BashTool/prompt.ts
+    normalized_excerpt: |
+      Confirm destructive or irreversible operations.
+      Avoid risky git actions unless explicitly requested.
+  - id: E005
+    category: C9
+    source: coding-agent-b/src/services/compact/prompt.ts
+    normalized_excerpt: |
+      Produce detailed compaction summary with user intent,
+      files touched, errors/fixes, and pending tasks.
+  - id: E006
+    category: C1
+    source: coding-agent-c/aider/coders/base_prompts.py
+    normalized_excerpt: |
+      Be diligent, implement fully, and avoid unrelated changes.
+  - id: E007
+    category: C4
+    source: coding-agent-c/aider/coders/editblock_prompts.py
+    normalized_excerpt: |
+      Output only SEARCH/REPLACE blocks in strict format.
+      Exact search match required for edits.
+  - id: E008
+    category: C9
+    source: coding-agent-c/aider/prompts.py
+    normalized_excerpt: |
+      Summarize prior conversation with emphasis on recent changes,
+      files, functions, and technical continuity.
+  - id: E009
+    category: C1
+    source: coding-agent-d/crates/goose/src/prompts/system.md
+    normalized_excerpt: |
+      General-purpose agent with extension-aware context and markdown responses.
+  - id: E010
+    category: C6
+    source: coding-agent-d/crates/goose/src/prompts/plan.md
+    normalized_excerpt: |
+      If request is clear, output numbered execution plan.
+      If unclear, output concise clarifying questions only.
+  - id: E011
+    category: C1
+    source: coding-agent-d/crates/goose/src/prompts/subagent_system.md
+    normalized_excerpt: |
+      Subagent must be efficient, bounded by turn count,
+      and avoid unnecessary tool usage.
+  - id: E012
+    category: C10
+    source: coding-agent-d/crates/goose/src/prompts/permission_judge.md
+    normalized_excerpt: |
+      Judge whether operation is read-only and classify permission implications.
+  - id: E013
+    category: C9
+    source: coding-agent-d/crates/goose/src/prompts/compaction.md
+    normalized_excerpt: |
+      Preserve complete technical continuity while compressing verbose segments.
+  - id: E014
+    category: C1
+    source: coding-agent-d/crates/goose/src/prompts/apps_create.md
+    normalized_excerpt: |
+      Generate standalone app with strict technical and packaging constraints.
+  - id: E015
+    category: C2
+    source: coding-agent-f/config/default.yaml
+    normalized_excerpt: |
+      Inject repository path and problem statement, then enforce
+      reproduce-edit-verify workflow.
+  - id: E016
+    category: C6
+    source: coding-agent-f/config/sweagent_0_7/07.yaml
+    normalized_excerpt: |
+      Use DISCUSSION and one COMMAND per turn.
+      Wait for observation before next action.
+  - id: E017
+    category: C1
+    source: coding-agent-g/internal/llm/prompt/coder.go
+    normalized_excerpt: |
+      Concise coding agent policy with verification expectations
+      and repository-convention adherence.
+  - id: E018
+    category: C4
+    source: coding-agent-g/internal/llm/prompt/task.go
+    normalized_excerpt: |
+      Output should be minimal, direct, and include absolute paths where needed.
+  - id: E019
+    category: C7
+    source: coding-agent-b/prompts/09-query-engine.md
+    normalized_excerpt: |
+      Query loop should handle retries, rate limits, and API errors without crashing.
+  - id: E020
+    category: C7
+    source: coding-agent-b/prompts/09-query-engine.md
+    normalized_excerpt: |
+      If optional subsystems block progress, stub or skip them and keep essential flow working.
+  - id: E021
+    category: C8
+    source: coding-agent-g/internal/llm/prompt/coder.go
+    normalized_excerpt: |
+      After changes, run lint/typecheck and fix issues related to modified files.
+  - id: E022
+    category: C8
+    source: coding-agent-b/prompts/09-query-engine.md
+    normalized_excerpt: |
+      Verification should require graceful failures and no unhandled crashes.
+  - id: E023
+    category: C2
+    source: coding-agent-g/internal/llm/prompt/coder.go
+    normalized_excerpt: |
+      Inject environment block with working directory, git state, platform, and date.
+  - id: E024
+    category: C10
+    source: coding-agent-g/internal/llm/prompt/coder.go
+    normalized_excerpt: |
+      Follow security best practices and never expose or log secrets.
+  - id: E025
+    category: C2
+    source: coding-agent-a/rust/crates/runtime/src/prompt.rs
+    normalized_excerpt: |
+      Discover instruction files from current and parent directories
+      and inject them into system prompt context.
+  - id: E026
+    category: C2
+    source: coding-agent-e/openhands_cli/utils.py
+    normalized_excerpt: |
+      Build seeded instructions by injecting task text or file contents
+      as the initial conversation context.
+
+stitch_prompt_library_v1:
+  essential:
+    - id: SP1
+      name: system_base
+      category: C1
+      template: |
+        You are Stitch, a specification-to-code runtime agent.
+        Operate only within stitch scope: code generation, tool loop execution, and result reporting.
+        Do not perform git lifecycle or multi-agent coordination actions.
+        Be precise, deterministic, and minimal in changes.
+    - id: SP2
+      name: context_injection
+      category: C2
+      template: |
+        Assignment: {{assignment_id}}
+        Trail: {{trail_id}}
+        Workspace: {{workspace_path}}
+        Active specification refs: {{spec_refs}}
+        Recent crumb summary: {{crumb_summary}}
+        Current failure context: {{failure_context}}
+    - id: SP3
+      name: tool_policy
+      category: C3
+      template: |
+        Available tools: {{tool_inventory}}
+        Use dedicated tools over shell when equivalent.
+        Only call configured tools.
+        If requested action requires unavailable tool, return structured limitation and next best action.
+    - id: SP4
+      name: response_format
+      category: C4
+      template: |
+        Return one of:
+        1) terminal_response: no further tool calls needed
+        2) actionable_response: includes next tool call intent and arguments
+        Ensure output is parseable and unambiguous.
+    - id: SP5
+      name: edit_patch_instruction
+      category: C5
+      template: |
+        For code mutation:
+        - Prefer edit_file for existing files
+        - Use write_file for create/overwrite only
+        - Keep edits minimal and scoped
+        - Preserve existing style and indentation
+        - Never modify out-of-workspace paths
+    - id: SP6
+      name: error_recovery
+      category: C7
+      template: |
+        Last action failed: {{error_code}} {{error_message}}
+        Diagnose root cause.
+        Propose one corrective next action.
+        Do not repeat identical failing tool call without parameter/context change.
+    - id: SP7
+      name: verification_reflection
+      category: C8
+      template: |
+        Verify changes against specification and checks.
+        Run configured validation path and report exact outcomes.
+        If verification cannot run, state why and what remains unverified.
+    - id: SP8
+      name: permission_safety
+      category: C10
+      template: |
+        Respect orchestrator-provided tool allowlist and safety constraints.
+        Do not attempt prohibited operations.
+        Return structured rejection and safe alternative when blocked.
+  optional:
+    - id: SP9
+      name: planning_overlay
+      category: C6
+      template: |
+        For complex tasks, emit concise ordered steps with dependencies.
+        Include branch logic for likely failure cases.
+    - id: SP10
+      name: summary_compression
+      category: C9
+      template: |
+        Compress prior context while preserving:
+        user intent, files changed, key decisions, errors/fixes, pending tasks.
+    - id: SP11
+      name: memory_overlay
+      category: C9
+      template: |
+        Apply relevant durable conventions from memory:
+        {{memory_items}}
+        Do not override explicit current assignment constraints.
+    - id: SP12
+      name: role_style_overlay
+      category: C1
+      template: |
+        Communication style: {{style_profile}}
+        Maintain identical behavioral constraints and tool policy.
+
+maintenance:
+  versioning:
+    prompt_library_version: v1
+    update_policy: |
+      Any prompt template change requires version bump and trace update to affected
+      interfaces/use-cases/PRDs.
+  traceability_links:
+    - docs/specs/product-requirements/prd010-prompt-library-and-composition.yaml
+    - docs/specs/interfaces/if001-llm-tool-adapter.yaml
+    - docs/specs/use-cases/uc001-agentic-loop-core.yaml

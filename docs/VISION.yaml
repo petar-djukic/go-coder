@@ -1,0 +1,100 @@
+id: agent-runtime
+title: Agent Runtime Vision
+
+executive_summary: |
+  We build an agent runtime where workflows are tracked as trails, tool execution attempts
+  are tracked as crumbs, and tool availability is scoped by stashes.
+
+  The model proposes tool calls. The runtime enforces stash gating, typed argument decoding,
+  semantic validation, execution boundaries, and structured error reporting. We support undo
+  and compensation where tools declare rollback capability.
+
+problem: |
+  Agent loops often mix planning, authorization, execution, and history in one opaque control
+  path. This causes recurring failure modes.
+
+  1. Tools run outside intended workflow context.
+  2. Arguments pass shape checks but fail semantic intent.
+  3. Permission failures are inconsistent across tools.
+  4. Side effects are difficult to roll back.
+  5. Audit and replay are incomplete.
+
+what_this_does: |
+  We provide a deterministic runtime control plane for model-driven tool invocation.
+
+  1. Trail-scoped workflow lifecycle.
+  2. Stash-scoped tool availability.
+  3. Typed decoding for JSON and YAML payloads.
+  4. Semantic validation before invocation.
+  5. Structured execution and permission failure reporting.
+  6. Crumb-based audit records for accepted and rejected calls.
+  7. Undo and compensation flows driven by declared tool modes.
+
+why_we_build_this: |
+  We need coding agents that can run tools on real systems without losing control of safety,
+  traceability, and recoverability. The crumbs model gives us the right primitives for this
+  runtime design.
+
+  1. Trail as workflow boundary.
+  2. Crumb as invocation ledger item.
+  3. Stash as capability boundary.
+  4. Link-based lineage for dependencies and rollback context.
+
+success_criteria:
+  invocation_persistence: |
+    Every invocation attempt persists one crumb with deterministic outcome metadata.
+  stash_gating: |
+    No tool executes unless enabled in the active stash.
+  validation_enforcement: |
+    Decode and semantic failures are rejected before invocation.
+  error_reporting: |
+    Permission and OS failures are surfaced as structured execution errors.
+  rollback_reporting: |
+    Trail rollback reports include success, failure, skipped, and non-reversible counts.
+
+implementation_phases:
+  - phase: "01.0"
+    focus: Foundation contracts and trail lifecycle
+    deliverables: |
+      ARCHITECTURE.yaml, prd001-tool-system-components-interfaces,
+      prd002-trail-lifecycle-state-machine.
+  - phase: "01.1"
+    focus: Stash and invocation controls
+    deliverables: |
+      prd003-tool-stash-availability, prd004-tool-invocation-validation,
+      prd006-stitch-essential-toolset, prd007-file-read-search-and-mutation-safety,
+      prd008-mage-task-execution-and-diagnostics, prd009-hexagonal-ports-and-wiring,
+      prd010-prompt-library-and-composition, interface specifications.
+  - phase: "02.0"
+    focus: Undo and compensation
+    deliverables: |
+      prd005-undo-and-compensation.
+  - phase: "03.0"
+    focus: Hardening and measurable validation
+    deliverables: |
+      Use-case specifications, test-suite specifications,
+      ts001-ports-and-adapters-contracts.
+
+risks:
+  - risk: Overscoped stashes allow unsafe tools
+    impact: High
+    likelihood: Medium
+    mitigation: Deny-by-default stash policy and explicit stash review controls.
+  - risk: Semantic drift between validators and tool behavior
+    impact: Medium
+    likelihood: Medium
+    mitigation: Keep validators in tool packages and enforce contract tests.
+  - risk: Partial rollback for non-reversible tools
+    impact: High
+    likelihood: High
+    mitigation: Require explicit undo modes and unresolved side-effect reporting.
+  - risk: Crumb growth degrades query performance
+    impact: Medium
+    likelihood: Medium
+    mitigation: Pagination, retention windows, and archival policies.
+
+not:
+  - We are not a predefined workflow orchestration engine.
+  - We are not a message queue.
+  - We are not a model training or prompt-tuning platform.
+  - We do not guarantee full rollback for non-reversible tools.

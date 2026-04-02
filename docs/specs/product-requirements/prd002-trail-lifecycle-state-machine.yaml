@@ -1,0 +1,79 @@
+id: prd002-trail-lifecycle-state-machine
+title: Trail Lifecycle State Machine
+
+problem: |
+  Tool execution contracts exist, but orchestration remains undefined without a trail state machine.
+  We need deterministic lifecycle transitions, guard checks, and transition events for trail-level
+  control and audit.
+
+goals:
+  - G1: Define trail states and legal transitions.
+  - G2: Define transition guards for activation, completion, and abandonment.
+  - G3: Define lifecycle event contracts for observability.
+  - G4: Define interaction points with rollback flow.
+
+requirements:
+  R1:
+    title: State Model
+    items:
+    - R1.1: Trail states must include draft, active, completed, and abandoned.
+    - R1.2: Each trail must have exactly one current state.
+    - R1.3: State transitions must persist atomically with transition metadata.
+  R2:
+    title: Legal Transitions
+    items:
+    - R2.1: Transition draft to active must be allowed.
+    - R2.2: Transition active to completed must be allowed.
+    - R2.3: Transition active to abandoned must be allowed.
+    - R2.4: Transitions from terminal states must be rejected.
+  R3:
+    title: Activation Guards
+    items:
+    - R3.1: Activation must require a resolvable trail-bound stash.
+    - R3.2: Activation must fail when stash resolution fails.
+    - R3.3: Activation must persist stash id and stash version in trail metadata.
+  R4:
+    title: Completion and Abandon Guards
+    items:
+    - R4.1: Completion must require no unresolved blocking failures.
+    - R4.2: Abandon must be allowed when unresolved failures exist.
+    - R4.3: Abandon may trigger rollback plan execution when configured.
+  R5:
+    title: Eventing and Audit
+    items:
+    - R5.1: Successful transitions must emit lifecycle events.
+    - R5.2: Rejected transitions must emit rejection events with reason code.
+    - R5.3: Transition events must include trail id, from state, to state, actor, and timestamp.
+  R6:
+    title: Crumb Relationship
+    items:
+    - R6.1: Every crumb must reference one trail.
+    - R6.2: Completed trails must reject new crumbs.
+    - R6.3: Abandoned trails must reject new crumbs.
+non_goals:
+  - Define tool argument semantics.
+  - Define per-tool permission internals.
+  - Define low-level persistence implementation choices.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Trail state set supports only draft, active, completed, and abandoned with one active state at a time.
+    traces: [R1.1, R1.2]
+  - id: AC2
+    criterion: Legal transitions draft to active, active to completed, and active to abandoned are accepted.
+    traces: [R2.1, R2.2, R2.3]
+  - id: AC3
+    criterion: Transitions from terminal states are rejected with structured reason events.
+    traces: [R2.4, R5.2]
+  - id: AC4
+    criterion: Activation fails when stash cannot be resolved and succeeds when stash id and version are persisted.
+    traces: [R3.1, R3.2, R3.3]
+  - id: AC5
+    criterion: Completion and abandon guard behavior is enforced, including optional rollback trigger on abandon.
+    traces: [R4.1, R4.2, R4.3]
+  - id: AC6
+    criterion: Transition writes are atomic and include complete transition metadata.
+    traces: [R1.3, R5.1, R5.3]
+  - id: AC7
+    criterion: Crumb creation requires trail linkage and is rejected for completed or abandoned trails.
+    traces: [R6.1, R6.2, R6.3]

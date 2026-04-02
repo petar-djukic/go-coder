@@ -1,0 +1,77 @@
+id: prd003-tool-stash-availability
+title: Tool Stash Availability
+
+problem: |
+  Model-proposed tool calls must be constrained by workflow context. Without stash-gated
+  eligibility, tools can execute outside intended capability boundaries.
+
+goals:
+  - G1: Define stash as per-trail tool availability authority.
+  - G2: Define deterministic eligibility resolution.
+  - G3: Support policy-safe overrides.
+  - G4: Define auditable availability decisions.
+
+requirements:
+  R1:
+    title: Stash Data Model
+    items:
+    - R1.1: Stash must include stash_id, version, and entries.
+    - R1.2: Each stash entry must include tool_name and enabled.
+    - R1.3: Each stash entry may include policy mode and default args.
+    - R1.4: Stash schema must support YAML and JSON serialization.
+  R2:
+    title: Trail Binding
+    items:
+    - R2.1: Active trail must reference exactly one active stash.
+    - R2.2: Activation must fail if referenced stash does not exist.
+    - R2.3: Activation must persist stash version in trail metadata.
+    - R2.4: Runtime must support configurable stash mutability policy for active trails.
+  R3:
+    title: Eligibility Resolution
+    items:
+    - R3.1: Availability check must run before argument decoding.
+    - R3.2: Tool is eligible only when entry exists and enabled is true.
+    - R3.3: Unavailable tools must be rejected with reason code tool_not_in_stash.
+    - R3.4: Availability decisions must include trail id, stash id, stash version, and tool name.
+  R4:
+    title: Policy Overrides
+    items:
+    - R4.1: Stash entry may define per-tool policy mode for downstream permission behavior.
+    - R4.2: Stash defaults may merge into call args only when descriptor allows defaults.
+    - R4.3: Policy overrides must never enable tools absent from stash entries.
+  R5:
+    title: Observability and Audit
+    items:
+    - R5.1: Every availability decision must emit an event.
+    - R5.2: Rejected availability decisions must create rejection crumbs.
+    - R5.3: Decision events must include call and trail correlation ids.
+non_goals:
+  - Define tool semantic validation internals.
+  - Define runtime permission enforcement internals.
+  - Define rollback execution internals.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Trail activation fails for missing stash and succeeds for existing stash.
+    traces: [R2.1, R2.2]
+  - id: AC2
+    criterion: Calls to tools absent from stash are rejected before decode with reason tool_not_in_stash.
+    traces: [R3.1, R3.2, R3.3]
+  - id: AC3
+    criterion: Availability decisions persist trail, stash, stash version, and tool context.
+    traces: [R3.4, R5.3]
+  - id: AC4
+    criterion: Rejection path emits event and writes rejection crumb.
+    traces: [R5.1, R5.2]
+  - id: AC5
+    criterion: Stash schema round-trips in YAML and JSON.
+    traces: [R1.4]
+  - id: AC6
+    criterion: Stash schema enforces required top-level and entry fields, and accepts optional policy and defaults fields.
+    traces: [R1.1, R1.2, R1.3]
+  - id: AC7
+    criterion: Activation persists stash version and enforces configured mutability behavior.
+    traces: [R2.3, R2.4]
+  - id: AC8
+    criterion: Policy overrides and defaults never enable missing tools.
+    traces: [R4.1, R4.2, R4.3]

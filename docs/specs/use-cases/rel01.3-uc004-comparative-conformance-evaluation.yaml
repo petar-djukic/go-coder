@@ -1,0 +1,36 @@
+id: rel01.3-uc004-comparative-conformance-evaluation
+title: Comparative Conformance Evaluation
+summary: |
+  Evaluate the agent runtime against conformance baselines derived from open-source
+  agent analysis. Verify that the runtime meets or exceeds baseline capabilities
+  for prompt design, tool management, workflow control, and output parsing.
+actor: Developer or evaluator running conformance checks
+trigger: Runtime reaches sufficient maturity for baseline comparison
+flow:
+  - F1: "Load conformance baseline requirements from prd021"
+  - F2: "Configure test harness with runtime instance and baseline checklist"
+  - F3: "Execute prompt transparency checks: verify prompt assembly is inspectable and reproducible"
+  - F4: "Execute parser robustness checks: verify tool call normalization handles malformed inputs"
+  - F5: "Execute workflow control checks: verify agent runtime vs LLM decision boundaries"
+  - F6: "Execute tool architecture checks: verify dynamic tool subset computation per request"
+  - F7: "Execute Go creation readiness checks: verify Go-specific diagnostics and LSP integration"
+  - F8: "Aggregate results and produce conformance report"
+  - F9: "Identify gaps and map to PRD requirements for future work"
+touchpoints:
+  - T1: "StitchBoundaryAdapter — entry interface conformance (prd021-comparative-agent-conformance-baseline R1)"
+  - T2: "AgentLoopOrchestrator — workflow control conformance (prd021-comparative-agent-conformance-baseline R2)"
+  - T3: "InvocationValidator — parser robustness conformance (prd021-comparative-agent-conformance-baseline R3)"
+  - T4: "PermissionExecutor — safety and permission conformance (prd021-comparative-agent-conformance-baseline R4)"
+  - T5: "ModelResponseRouter — output routing conformance (prd021-comparative-agent-conformance-baseline R5)"
+  - T6: "ValidationPort — Go diagnostics conformance (prd021-comparative-agent-conformance-baseline R6)"
+  - T7: "CrumbLedger — audit quality conformance (prd021-comparative-agent-conformance-baseline R7)"
+success_criteria:
+  - id: S1
+    criterion: Conformance report covers all baseline dimensions with pass/fail/partial results
+    traces:
+      - prd021-comparative-agent-conformance-baseline AC1
+  - id: S2
+    criterion: Identified gaps are mapped to specific PRD R-items for follow-up
+    traces:
+      - prd021-comparative-agent-conformance-baseline AC2
+test_suite: test-rel01.3

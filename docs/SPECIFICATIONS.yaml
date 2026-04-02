@@ -1,0 +1,221 @@
+id: coding-agent
+title: Specifications
+
+overview: |
+  We build an agent runtime where workflows are tracked as trails, tool execution attempts
+  are tracked as crumbs, and tool availability is scoped by stashes. The runtime is designed
+  as the stitch execution unit inside an external orchestrator (cobbler-scaffold). It is
+  language-agnostic: the orchestrator selects the target programming language and provides
+  language-specific rules, conventions, and build commands at invocation time. The runtime
+  itself is implemented in Go and links with the crumbs library.
+
+  This document indexes all PRDs, use cases, and test suites in the project and shows how they
+  relate. For goals and boundaries, see VISION.yaml. For components and interfaces, see
+  ARCHITECTURE.yaml.
+
+roadmap_summary:
+  - version: "01.0"
+    name: Agent Runtime Core Contracts
+    use_cases_done: 0
+    use_cases_total: 6
+    status: specs_done
+  - version: "01.1"
+    name: Post-Core Validation
+    use_cases_done: 0
+    use_cases_total: 4
+    status: not_started
+  - version: "02.0"
+    name: Undo and Compensation Delivery
+    use_cases_done: 0
+    use_cases_total: 2
+    status: not_started
+  - version: "03.0"
+    name: Hardening and Measurable Validation
+    use_cases_done: 0
+    use_cases_total: 4
+    status: not_started
+  - version: "99.0"
+    name: Unscheduled
+    use_cases_done: 0
+    use_cases_total: 0
+    status: not_started
+
+prd_index:
+  - id: prd001-tool-system-components-interfaces
+    title: Tool System Components and Interfaces
+    summary: Define canonical runtime components, interface contracts, and sequence responsibilities for tool execution control.
+    path: specs/product-requirements/prd001-tool-system-components-interfaces.yaml
+  - id: prd002-trail-lifecycle-state-machine
+    title: Trail Lifecycle State Machine
+    summary: Define trail state transitions, activation guards, and terminal-state enforcement.
+    path: specs/product-requirements/prd002-trail-lifecycle-state-machine.yaml
+  - id: prd003-tool-stash-availability
+    title: Tool Stash Availability
+    summary: Define stash-scoped tool eligibility checks and deny-by-default policy.
+    path: specs/product-requirements/prd003-tool-stash-availability.yaml
+  - id: prd004-tool-invocation-validation
+    title: Tool Invocation Validation
+    summary: Define typed decode, semantic validation, and execution pipeline for tool calls.
+    path: specs/product-requirements/prd004-tool-invocation-validation.yaml
+  - id: prd005-undo-and-compensation
+    title: Undo and Compensation
+    summary: Define rollback planning, undo mode declaration, and compensation execution.
+    path: specs/product-requirements/prd005-undo-and-compensation.yaml
+  - id: prd006-stitch-essential-toolset
+    title: Stitch Essential Toolset
+    summary: Define the minimal tool surface for specification-to-code generation.
+    path: specs/product-requirements/prd006-stitch-essential-toolset.yaml
+  - id: prd007-file-read-search-and-mutation-safety
+    title: File Read Search and Mutation Safety
+    summary: Define safe file operations with read-before-write and patch-based mutation.
+    path: specs/product-requirements/prd007-file-read-search-and-mutation-safety.yaml
+  - id: prd008-mage-task-execution-and-diagnostics
+    title: Mage Task Execution and Diagnostics
+    summary: Define build, lint, and test invocation with structured result capture.
+    path: specs/product-requirements/prd008-mage-task-execution-and-diagnostics.yaml
+  - id: prd009-hexagonal-ports-and-wiring
+    title: Hexagonal Ports and Wiring
+    summary: Define port interfaces and adapter classification for dependency inversion.
+    path: specs/product-requirements/prd009-hexagonal-ports-and-wiring.yaml
+  - id: prd010-prompt-library-and-composition
+    title: Prompt Library and Composition
+    summary: Define prompt family taxonomy, composition contracts, and provenance tracking.
+    path: specs/product-requirements/prd010-prompt-library-and-composition.yaml
+  - id: prd011-system-behavior-prompt-family
+    title: System Behavior Prompt Family
+    summary: Define system-level prompt patterns for agent identity and operational constraints.
+    path: specs/product-requirements/prd011-system-behavior-prompt-family.yaml
+  - id: prd012-context-injection-prompt-family
+    title: Context Injection Prompt Family
+    summary: Define prompt patterns for injecting project context and workspace state.
+    path: specs/product-requirements/prd012-context-injection-prompt-family.yaml
+  - id: prd013-tool-policy-prompt-family
+    title: Tool Policy Prompt Family
+    summary: Define prompt patterns for tool usage guidance and constraints.
+    path: specs/product-requirements/prd013-tool-policy-prompt-family.yaml
+  - id: prd014-response-format-prompt-family
+    title: Response Format Prompt Family
+    summary: Define prompt patterns for structured output formatting.
+    path: specs/product-requirements/prd014-response-format-prompt-family.yaml
+  - id: prd015-editing-protocol-prompt-family
+    title: Editing Protocol Prompt Family
+    summary: Define prompt patterns for file editing workflows and conventions.
+    path: specs/product-requirements/prd015-editing-protocol-prompt-family.yaml
+  - id: prd016-planning-decomposition-prompt-family
+    title: Planning Decomposition Prompt Family
+    summary: Define prompt patterns for task planning and work decomposition.
+    path: specs/product-requirements/prd016-planning-decomposition-prompt-family.yaml
+  - id: prd017-error-recovery-prompt-family
+    title: Error Recovery Prompt Family
+    summary: Define prompt patterns for error handling and recovery strategies.
+    path: specs/product-requirements/prd017-error-recovery-prompt-family.yaml
+  - id: prd018-verification-reflection-prompt-family
+    title: Verification Reflection Prompt Family
+    summary: Define prompt patterns for self-verification and output reflection.
+    path: specs/product-requirements/prd018-verification-reflection-prompt-family.yaml
+  - id: prd019-memory-summary-prompt-family
+    title: Memory Summary Prompt Family
+    summary: Define prompt patterns for context compaction and session memory.
+    path: specs/product-requirements/prd019-memory-summary-prompt-family.yaml
+  - id: prd020-safety-permissions-prompt-family
+    title: Safety Permissions Prompt Family
+    summary: Define prompt patterns for permission enforcement and safety constraints.
+    path: specs/product-requirements/prd020-safety-permissions-prompt-family.yaml
+  - id: prd021-comparative-agent-conformance-baseline
+    title: Comparative Agent Conformance Baseline
+    summary: Define baseline conformance requirements derived from open-source agent analysis.
+    path: specs/product-requirements/prd021-comparative-agent-conformance-baseline.yaml
+  - id: prd022-exact-match-file-editing
+    title: Exact-Match File Editing
+    summary: Define the exact-match editing algorithm using Go stdlib for edit_file.
+    path: specs/product-requirements/prd022-exact-match-file-editing.yaml
+  - id: prd023-fuzzy-match-file-editing
+    title: Fuzzy-Match File Editing
+    summary: Define the optional fuzzy fallback for edit_file using diff-match-patch.
+    path: specs/product-requirements/prd023-fuzzy-match-file-editing.yaml
+  - id: prd024-llm-degradation-detection
+    title: LLM Degradation Detection
+    summary: Define per-turn metrics, always-on loop statistics, and degradation signals for progress_stalled exit.
+    path: specs/product-requirements/prd024-llm-degradation-detection.yaml
+
+use_case_index:
+  - id: rel01.0-uc001-agentic-loop-core
+    title: Agentic Loop Core
+    release: "01.0"
+    status: spec_complete
+    test_suite: test-rel01.0
+    path: specs/use-cases/rel01.0-uc001-agentic-loop-core.yaml
+  - id: rel01.0-uc002-orchestrator-stitch-boundary
+    title: Orchestrator Stitch Boundary
+    release: "01.0"
+    status: spec_complete
+    test_suite: test-rel01.0
+    path: specs/use-cases/rel01.0-uc002-orchestrator-stitch-boundary.yaml
+  - id: rel01.1-uc003-hexagonal-runtime-wiring
+    title: Hexagonal Runtime Wiring
+    release: "01.1"
+    status: pending
+    test_suite: test-rel01.1
+    path: specs/use-cases/rel01.1-uc003-hexagonal-runtime-wiring.yaml
+  - id: rel01.3-uc004-comparative-conformance-evaluation
+    title: Comparative Conformance Evaluation
+    release: "01.3"
+    status: pending
+    test_suite: test-rel01.3
+    path: specs/use-cases/rel01.3-uc004-comparative-conformance-evaluation.yaml
+
+test_suite_index:
+  - id: ts001-ports-and-adapters-contracts
+    title: Ports and Adapters Contracts
+    traces:
+      - rel01.1-uc003-hexagonal-runtime-wiring
+    test_case_count: 0
+    path: specs/test-suites/ts001-ports-and-adapters-contracts.yaml
+  - id: ts002-comparative-conformance-baseline
+    title: Comparative Conformance Baseline
+    traces:
+      - rel01.3-uc004-comparative-conformance-evaluation
+    test_case_count: 0
+    path: specs/test-suites/ts002-comparative-conformance-baseline.yaml
+
+prd_to_use_case_mapping:
+  - use_case: rel01.0-uc001-agentic-loop-core
+    prd: prd002-trail-lifecycle-state-machine
+    why_required: Exercises trail state transitions during agentic loop execution
+    coverage: Partial
+  - use_case: rel01.0-uc001-agentic-loop-core
+    prd: prd004-tool-invocation-validation
+    why_required: Validates decode, semantic, and permission checks within loop turns
+    coverage: Partial
+  - use_case: rel01.0-uc002-orchestrator-stitch-boundary
+    prd: prd001-tool-system-components-interfaces
+    why_required: Exercises component boundaries at the orchestrator integration point
+    coverage: Partial
+  - use_case: rel01.1-uc003-hexagonal-runtime-wiring
+    prd: prd009-hexagonal-ports-and-wiring
+    why_required: Validates port and adapter classification with runtime wiring
+    coverage: Partial
+  - use_case: rel01.3-uc004-comparative-conformance-evaluation
+    prd: prd021-comparative-agent-conformance-baseline
+    why_required: Measures agent runtime against open-source conformance baselines
+    coverage: Partial
+
+coverage_gaps: |
+  Most PRDs are not yet referenced by use cases. Releases 01.1, 02.0, and 03.0 have
+  pending use cases that need YAML files authored. Test suites have zero test cases.
+  The specification graph will be completed during the measure phase once cobbler-scaffold
+  generates task proposals from the roadmap.
+
+  New interface specs if007 (message history), if008 (tool schemas), if009 (provider
+  config), and if010 (agent loop state machine) define the remaining contracts needed
+  for a working agent loop. System prompt template is at
+  docs/prompts/system-prompt-default.yaml. Provider configuration is in
+  configuration.yaml under the agent section.
+
+  if002 (invoke interface) updated to async model: invoke returns immediately with
+  loop_trail_id, orchestrator polls cupboard for outcome. Loop trail uses crumbs
+  branches_from link to connect to the orchestrator's assignment crumb.
+
+  prd022 (exact-match file editing) ships in release 01.1 with zero external dependencies.
+  prd023 (fuzzy-match file editing) ships in a later release behind a configuration flag
+  and adds github.com/sergi/go-diff as the sole external dependency.

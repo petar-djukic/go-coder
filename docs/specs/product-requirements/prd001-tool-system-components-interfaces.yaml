@@ -1,0 +1,69 @@
+id: prd001-tool-system-components-interfaces
+title: Tool System Components and Interfaces
+
+problem: |
+  We need a stable component contract for tool registration, selection, validation,
+  invocation, normalization, and eventing. Without explicit boundaries, implementations
+  diverge in behavior, safety, and observability.
+
+goals:
+  - G1: Define canonical runtime components for tool execution control.
+  - G2: Define interface contracts that support multiple agent families.
+  - G3: Define component relationships and sequence responsibilities.
+  - G4: Define testable acceptance criteria with complete requirement traceability.
+
+requirements:
+  R1:
+    title: Component Boundaries
+    items:
+    - R1.1: Runtime must define ToolRegistry, ToolSelector, ToolCallInterpreter, ToolSyntaxValidator, ToolSemanticValidator, PermissionGate, ToolInvoker, ResultNormalizer, and ToolEventBus.
+    - R1.2: Each component must have one primary responsibility and explicit input and output contract.
+    - R1.3: Component contracts must be independent from provider-specific SDK internals.
+  R2:
+    title: Data Contracts
+    items:
+    - R2.1: Runtime must define ToolDescriptor contract with tool identity, schemas, capability tags, and adapter key.
+    - R2.2: Runtime must define SelectionContext contract including trail, phase, permission mode, and feature flags.
+    - R2.3: Runtime must define canonical ToolCall and ToolResult contracts for all invocation paths.
+  R3:
+    title: Interface Contracts
+    items:
+    - R3.1: Runtime must define registry and selector interfaces for tool discovery and effective set projection.
+    - R3.2: Runtime must define interpreter and validator interfaces for shape and semantic checks.
+    - R3.3: Runtime must define permission, invoker, and normalizer interfaces for execution and outcome packaging.
+  R4:
+    title: Relationship and Sequence Model
+    items:
+    - R4.1: Runtime must define structural relationships between components.
+    - R4.2: Runtime must define ordered sequence from selection through normalization.
+    - R4.3: Invocation must be blocked unless validation and permission checks pass.
+  R5:
+    title: Observability and Audit
+    items:
+    - R5.1: Runtime must emit lifecycle events for selection, validation, permission decisions, invocation, and normalization.
+    - R5.2: Events must be correlated by call and trail identifiers.
+    - R5.3: Denied and failed calls must be represented in normalized results.
+non_goals:
+  - Define provider-specific prompt payload formats.
+  - Define individual tool business logic internals.
+  - Define rollout sequencing for production deployment.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Canonical component list and responsibility descriptions exist and are unambiguous.
+    traces: [R1.1, R1.2]
+  - id: AC2
+    criterion: Data contracts for ToolDescriptor, SelectionContext, ToolCall, and ToolResult are specified with required fields.
+    traces: [R2.1, R2.2, R2.3]
+  - id: AC3
+    criterion: Registry, selector, interpreter, validators, permission, invoker, and normalizer interfaces are specified.
+    traces: [R3.1, R3.2, R3.3]
+  - id: AC4
+    criterion: Structural and sequence relationship definitions show blocked invocation when validation or permission fails.
+    traces: [R4.1, R4.2, R4.3]
+  - id: AC5
+    criterion: Lifecycle event requirements and correlation requirements are specified for all decision edges.
+    traces: [R5.1, R5.2, R5.3]
+  - id: AC6
+    criterion: Component and interface definitions remain provider-agnostic.
+    traces: [R1.3]

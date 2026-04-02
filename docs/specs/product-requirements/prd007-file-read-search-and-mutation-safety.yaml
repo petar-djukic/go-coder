@@ -1,0 +1,71 @@
+id: prd007-file-read-search-and-mutation-safety
+title: File Read Search and Mutation Safety
+
+problem: |
+  File operations are the highest-risk capability in a coding runtime. Without
+  precise read/search contracts and strict mutation guardrails, the agent can
+  edit wrong files, perform unsafe writes, or produce non-reproducible outcomes.
+
+goals:
+  - G1: Define deterministic contracts for read_file and find_text.
+  - G2: Define safe mutation contracts for edit_file and write_file.
+  - G3: Define validation and rollback behavior for failed mutation attempts.
+  - G4: Define audit-ready metadata for all file operations.
+
+requirements:
+  R1:
+    title: Read and Search Contracts
+    items:
+    - R1.1: read_file must support bounded reads with explicit file path and range parameters.
+    - R1.2: find_text must support plain-text and regex modes.
+    - R1.3: find_text results must include file path and line anchors sufficient for follow-up reads or edits.
+    - R1.4: find_files and find_text must be composable in one loop turn for scoped lookup workflows.
+  R2:
+    title: Mutation Contracts
+    items:
+    - R2.1: edit_file must replace exactly one occurrence of old_string per invocation.
+    - R2.2: write_file must support explicit create and overwrite modes.
+    - R2.3: edit_file and write_file must reject out-of-workspace paths.
+    - R2.4: mutation tools must return changed file summaries suitable for loop continuation.
+  R3:
+    title: Safety and Consistency Guards
+    items:
+    - R3.1: mutation tools must provide deterministic failure when target context does not match expected content.
+    - R3.2: failed mutation attempts must leave file contents unchanged.
+    - R3.3: mutation tools must support dry-run mode for non-destructive validation.
+  R4:
+    title: Verification Integration
+    items:
+    - R4.1: runtime must support get_errors after mutation to detect compile or lint errors.
+    - R4.2: mutation results must carry enough metadata for build_target follow-up selection.
+    - R4.3: mutation and verification outcomes must be correlatable in trail crumbs.
+  R5:
+    title: Error Model and Audit
+    items:
+    - R5.1: file operation failures must return normalized error codes.
+    - R5.2: every file operation invocation must emit structured tool events.
+    - R5.3: event and crumb metadata must include assignment id, trail id, call id, and tool name.
+non_goals:
+  - Define AST-aware transformation tools.
+  - Define language-specific formatter internals.
+  - Define git staging or commit logic.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: read_file and find_text support bounded and searchable code retrieval with file and line anchors.
+    traces: [R1.1, R1.2, R1.3, R1.4]
+  - id: AC2
+    criterion: edit_file and write_file enforce workspace boundaries and explicit mutation semantics.
+    traces: [R2.1, R2.2, R2.3, R2.4]
+  - id: AC3
+    criterion: context mismatch and failed edits produce deterministic no-change outcomes.
+    traces: [R3.1, R3.2]
+  - id: AC4
+    criterion: mutation tools support dry-run validation mode.
+    traces: [R3.3]
+  - id: AC5
+    criterion: mutation outputs can drive diagnostics and mage follow-up execution with correlated crumb metadata.
+    traces: [R4.1, R4.2, R4.3]
+  - id: AC6
+    criterion: file operation failures and events follow normalized error and audit metadata contracts.
+    traces: [R5.1, R5.2, R5.3]

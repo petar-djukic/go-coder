@@ -1,0 +1,172 @@
+id: if002-agent-invoke-interface
+title: Stitch Agent Invoke Interface Contract
+component: StitchBoundaryAdapter
+
+purpose: |
+  Define the invocation interface used by the orchestrator to start a code
+  generation loop. The orchestrator creates an assignment crumb in its own
+  workflow trail, then calls invoke. The agent creates a loop trail with a
+  branches_from link to the assignment crumb, starts the loop in its own
+  goroutine, and returns the loop trail ID immediately.
+
+  The orchestrator does not block. It discovers progress and outcome by
+  querying the loop trail state and crumbs via the cupboard. When the trail
+  reaches completed or abandoned, the orchestrator reads the result crumb
+  (LoopResult from if010) to determine what happened.
+
+ownership_boundary:
+  orchestrator_responsibilities:
+    - prepare_execution_environment
+    - configure_allowed_tools_and_settings
+    - create_assignment_crumb_in_workflow_trail
+    - poll_loop_trail_for_outcome
+  stitch_runtime_responsibilities:
+    - validate invoke request
+    - create loop trail with branches_from link
+    - start loop in goroutine
+    - write result crumb and transition trail on exit
+
+types:
+  AgentInvokeRequest:
+    required:
+      - assignment_id
+      - assignment_crumb_id
+      - system_prompt
+      - specification
+      - provider
+      - model
+      - context_budget
+      - max_turns
+      - tool_schemas
+    fields:
+      assignment_id:
+        type: string
+        description: Orchestrator assignment ID for correlation.
+      assignment_crumb_id:
+        type: string
+        description: |
+          The crumb ID in the orchestrator's workflow trail that represents
+          this assignment. The loop trail will branches_from this crumb.
+      system_prompt:
+        type: string
+      specification:
+        type: string
+        description: The specification payload for code generation.
+      provider:
+        type: string
+        description: Provider name (ollama, bedrock).
+      model:
+        type: string
+      context_budget:
+        type: integer
+        description: Max tokens for the model context window.
+      max_turns:
+        type: integer
+        description: Max LLM calls before the loop terminates.
+      tool_schemas:
+        type: array
+        items: object
+        description: Tool definitions sent to the LLM (see if010 ToolSchema).
+      language:
+        type: string
+        description: |
+          Target programming language for code generation. Set by the
+          orchestrator based on workspace detection or explicit config.
+          Examples: go, typescript, python, rust. Used for traceability
+          and to select language-specific build target allowlists.
+      language_rules:
+        type: string
+        optional: true
+        description: |
+          Language-specific rules and conventions injected into the system
+          prompt by the orchestrator. Contains idiom guidance, naming
+          conventions, package layout, and build/test patterns for the
+          target language. When omitted, the system prompt uses only the
+          language-agnostic base template.
+      correlation_id:
+        type: string
+        optional: true
+
+  AgentInvokeResponse:
+    description: |
+      Returned immediately after the loop trail is created and the goroutine
+      is started. The orchestrator uses loop_trail_id to poll for outcome.
+    required:
+      - assignment_id
+      - loop_trail_id
+      - status
+    fields:
+      assignment_id:
+        type: string
+      loop_trail_id:
+        type: string
+        description: |
+          The trail ID of the loop trail. The orchestrator queries this
+          trail in the cupboard to discover progress and outcome.
+      status:
+        type: string
+        allowed:
+          - started
+          - rejected
+        description: |
+          started means the loop goroutine is running and the trail exists.
+          rejected means validation failed and no trail was created.
+      error:
+        type: object
+        optional: true
+        fields:
+          code:
+            type: string
+          message:
+            type: string
+
+operations:
+  - name: invoke
+    input: AgentInvokeRequest
+    output: AgentInvokeResponse
+    behavior:
+      - Validate the request (assignment_crumb_id exists, provider configured, tools valid).
+      - On validation failure, return status=rejected with error.
+      - Create a loop trail in the cupboard.
+      - Create a branches_from link from the loop trail to assignment_crumb_id.
+      - Create a token tracking stash scoped_to the loop trail.
+      - Transition trail to active.
+      - Start the loop (if010 start_loop) in a new goroutine.
+      - Return immediately with status=started and the loop_trail_id.
+
+error_codes:
+  - assignment_crumb_not_found
+  - environment_not_ready
+  - tools_not_configured
+  - invalid_invoke_request
+  - trail_creation_failed
+
+acceptance_checks:
+  - id: IF2-AC1
+    check: |
+      Invoke with valid request creates a loop trail, starts the goroutine,
+      and returns status=started with the loop_trail_id.
+  - id: IF2-AC2
+    check: Missing or invalid fields return status=rejected with error code.
+  - id: IF2-AC3
+    check: |
+      The loop trail has a branches_from link to the assignment_crumb_id.
+      Orchestrator can discover the loop trail by querying links from the
+      assignment crumb.
+  - id: IF2-AC4
+    check: |
+      Invoke returns immediately. The orchestrator does not block waiting
+      for the loop to finish.
+  - id: IF2-AC5
+    check: |
+      When the loop finishes, the trail transitions to completed or
+      abandoned and a result crumb (LoopResult) is the last crumb in
+      the trail.
+
+traceability:
+  use_cases:
+    - rel01.0-uc001-agentic-loop-core
+    - rel01.0-uc002-orchestrator-stitch-boundary
+  architecture_components:
+    - StitchBoundaryAdapter
+    - AgentLoopOrchestrator

@@ -1,0 +1,69 @@
+id: prd008-mage-task-execution-and-diagnostics
+title: Mage Task Execution and Diagnostics
+
+problem: |
+  Stitch runtime must validate generated code with predictable execution steps.
+  Without a constrained task runner contract, build and test behavior becomes
+  inconsistent across trails and hard to audit.
+
+goals:
+  - G1: Define a strict build_target contract for validation workflows.
+  - G2: Define allowlisted targets for build, test, lint, and clean.
+  - G3: Define deterministic execution results and failure handling.
+  - G4: Define integration with diagnostics and crumb audit records.
+
+requirements:
+  R1:
+    title: Target Model
+    items:
+    - R1.1: build_target must accept a target name and execution options.
+    - R1.2: Runtime must support build, test, lint, and clean target classes.
+    - R1.3: Target names must be resolved from orchestrator-provided allowlist configuration.
+  R2:
+    title: Execution Controls
+    items:
+    - R2.1: build_target must support timeout configuration.
+    - R2.2: build_target must support cancellation signaling.
+    - R2.3: Runtime must return non-zero exit outcomes without masking failure state.
+  R3:
+    title: Result Contract
+    items:
+    - R3.1: build_target results must include target, status, exit code, and duration.
+    - R3.2: build_target results must include normalized stdout and stderr summaries.
+    - R3.3: failed executions must include normalized error metadata and retryability hint.
+  R4:
+    title: Diagnostics Integration
+    items:
+    - R4.1: get_errors must be invokable independently of build_target.
+    - R4.2: get_errors must support file-scoped and workspace-scoped modes.
+    - R4.3: Runtime should support post-mutation workflows where get_errors complements mage execution outcomes.
+  R5:
+    title: Boundary and Audit
+    items:
+    - R5.1: build_target must reject non-allowlisted targets.
+    - R5.2: task execution and diagnostics invocations must produce correlated crumbs and events.
+    - R5.3: execution metadata must include assignment id, trail id, call id, and target name when applicable.
+non_goals:
+  - Define shell command execution as a first-class essential tool.
+  - Define CI pipeline orchestration logic.
+  - Define git hook or branch policy behavior.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: build_target accepts allowlisted targets and rejects non-allowlisted targets.
+    traces: [R1.1, R1.3, R5.1]
+  - id: AC2
+    criterion: build, test, lint, and clean target classes are supported.
+    traces: [R1.2]
+  - id: AC3
+    criterion: timeout, cancellation, and non-zero exit behavior are deterministic and observable.
+    traces: [R2.1, R2.2, R2.3]
+  - id: AC4
+    criterion: execution results include normalized status, exit code, duration, and output summaries.
+    traces: [R3.1, R3.2, R3.3]
+  - id: AC5
+    criterion: get_errors supports both file and workspace scopes and can be run independently.
+    traces: [R4.1, R4.2]
+  - id: AC6
+    criterion: mutation-follow-up validation can combine mage execution and diagnostics with correlated metadata.
+    traces: [R4.3, R5.2, R5.3]

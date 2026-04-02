@@ -1,0 +1,293 @@
+id: if001-llm-tool-adapter
+title: LLMToolAdapter Interface Contract
+component: LLMToolAdapter
+
+purpose: |
+  Define the minimal request and response contracts for llm.generate execution
+  with prompt reference resolution, asynchronous provider invocation, timeout
+  behavior, and instrumentation output.
+
+  The LLM object operates like the Ollama chat API: it hides all provider-specific
+  details of mapping raw model output to tool calls. When the response leaves the
+  LLM boundary, tool_calls is a list of ToolCallIntent objects whose arguments are
+  syntactically valid JSON. The caller never sees raw provider wire formats,
+  partial JSON strings, or provider-specific tool_use blocks.
+
+dependencies:
+  - ToolRegistry
+  - StashManager
+  - CrumbLedger
+
+types:
+  PromptReference:
+    required:
+      - source
+      - key
+    fields:
+      source:
+        type: string
+        allowed:
+          - stash
+          - crumb_attachment
+      key:
+        type: string
+      version:
+        type: string
+        optional: true
+      fallback_text:
+        type: string
+        optional: true
+
+  LLMInvocationRequest:
+    required:
+      - call_id
+      - trail_id
+      - tool_name
+      - provider
+      - model
+      - prompt_references
+      - execution
+    fields:
+      call_id:
+        type: string
+      trail_id:
+        type: string
+      tool_name:
+        type: string
+        const: llm.generate
+      provider:
+        type: string
+      model:
+        type: string
+      prompt_references:
+        type: array
+        items: PromptReference
+      inline_prompt:
+        type: string
+        optional: true
+      execution:
+        type: object
+        required:
+          - timeout_ms
+          - async
+        fields:
+          timeout_ms:
+            type: integer
+            min: 1
+          async:
+            type: boolean
+          max_retries:
+            type: integer
+            min: 0
+            default: 0
+          retry_backoff_ms:
+            type: integer
+            min: 0
+            default: 0
+      metadata:
+        type: object
+        optional: true
+
+  ToolCallIntent:
+    description: |
+      A single tool invocation extracted from the model response. The LLM object
+      parses provider-native formats (OpenAI function_call, Anthropic tool_use,
+      Ollama tool_calls) into this canonical shape. Arguments are always a parsed
+      JSON object — never a raw string. If the provider returns malformed JSON
+      the LLM object emits a parse_error ToolCallIntent instead of passing the
+      raw string downstream.
+    required:
+      - id
+      - name
+      - arguments
+    fields:
+      id:
+        type: string
+        description: Provider-assigned or generated correlation ID for this call.
+      name:
+        type: string
+        description: Canonical tool name matching a ToolRegistry descriptor.
+      arguments:
+        type: object
+        description: |
+          Parsed, syntactically valid JSON object. The LLM object guarantees this
+          is well-formed JSON/YAML before returning it. Downstream consumers
+          receive a Go map[string]any (or equivalent), never a raw string.
+      parse_error:
+        type: string
+        optional: true
+        description: |
+          If the provider returned arguments that could not be parsed to valid
+          JSON, this field holds the error detail. When set, arguments is empty
+          and the caller should treat this as a malformed-output condition.
+
+  LLMInvocationResult:
+    required:
+      - call_id
+      - trail_id
+      - status
+      - output
+      - metrics
+    fields:
+      call_id:
+        type: string
+      trail_id:
+        type: string
+      status:
+        type: string
+        allowed:
+          - succeeded
+          - failed
+          - timed_out
+      output:
+        type: object
+        required:
+          - text
+        fields:
+          text:
+            type: string
+          tool_calls:
+            type: array
+            items: ToolCallIntent
+            description: |
+              Zero or more tool calls extracted from the model response.
+              Each entry has already been normalized from the provider wire
+              format and arguments have been parsed to valid JSON. Empty
+              when the model returns a terminal (text-only) response.
+      metrics:
+        type: object
+        required:
+          - provider
+          - model
+          - latency_ms
+        fields:
+          provider:
+            type: string
+          model:
+            type: string
+          latency_ms:
+            type: integer
+          input_tokens:
+            type: integer
+            optional: true
+          output_tokens:
+            type: integer
+            optional: true
+          total_tokens:
+            type: integer
+            optional: true
+      error:
+        type: object
+        optional: true
+        fields:
+          code:
+            type: string
+          message:
+            type: string
+          retryable:
+            type: boolean
+
+operations:
+  - name: compose_prompt_from_references
+    input: LLMInvocationRequest
+    output:
+      type: object
+      required:
+        - composed_prompt
+      fields:
+        composed_prompt:
+          type: string
+        resolved_references:
+          type: array
+          items: PromptReference
+    behavior:
+      - Resolve prompt references from stash and crumb attachments.
+      - Preserve resolved references for crumb provenance metadata.
+
+  - name: invoke_provider_async
+    input: LLMInvocationRequest
+    output: LLMInvocationResult
+    behavior:
+      - Execute with asynchronous provider call semantics.
+      - Enforce timeout_ms from request.execution.
+      - Return timed_out status on timeout.
+      - Return failed status on provider or transport errors.
+      - Return succeeded status with output text and metrics on success.
+
+  - name: parse_tool_calls
+    input:
+      type: object
+      required:
+        - provider_response
+      fields:
+        provider_response:
+          type: object
+          description: Raw provider-native response (OpenAI ChatCompletion, Anthropic Message, Ollama chat response).
+    output:
+      type: array
+      items: ToolCallIntent
+    behavior:
+      - Map provider-native tool_use / function_call / tool_calls blocks to ToolCallIntent.
+      - Parse each arguments payload from JSON string to object.
+      - On malformed JSON, attempt repair (unescape, trim trailing comma).
+      - On unrecoverable parse failure, return ToolCallIntent with empty arguments and parse_error set.
+      - Assign correlation IDs from provider or generate deterministic IDs.
+      - This operation is internal to invoke_provider_async — callers do not call it directly.
+
+  - name: normalize_failure
+    input:
+      type: object
+      required:
+        - call_id
+        - trail_id
+        - failure
+      fields:
+        call_id:
+          type: string
+        trail_id:
+          type: string
+        failure:
+          type: object
+    output: LLMInvocationResult
+    behavior:
+      - Convert provider and runtime exceptions to structured error payload.
+      - Keep status consistent with failure class.
+
+error_codes:
+  - prompt_reference_not_found
+  - prompt_reference_version_mismatch
+  - provider_timeout
+  - provider_unavailable
+  - provider_rate_limited
+  - provider_response_invalid
+  - tool_call_arguments_malformed
+  - invocation_canceled
+
+acceptance_checks:
+  - id: IF-AC1
+    check: Missing prompt reference returns prompt_reference_not_found and failed status.
+  - id: IF-AC2
+    check: Timeout returns timed_out with provider_timeout code and latency metric.
+  - id: IF-AC3
+    check: Successful call returns text output and provider metrics.
+  - id: IF-AC4
+    check: Resolved prompt references are persisted for crumb provenance.
+  - id: IF-AC5
+    check: |
+      Tool calls returned in output.tool_calls have arguments as parsed JSON
+      objects, never raw strings. Downstream can marshal them without re-parsing.
+  - id: IF-AC6
+    check: |
+      Malformed provider arguments produce a ToolCallIntent with parse_error set
+      and empty arguments. The LLM object never passes syntactically invalid
+      JSON/YAML downstream.
+
+traceability:
+  requirements:
+    - prd001-tool-system-components-interfaces:R2.3
+    - prd004-tool-invocation-validation:R1.1
+    - prd004-tool-invocation-validation:R5.2
+    - prd004-tool-invocation-validation:R6.3
+    - prd004-tool-invocation-validation:R6.4
+  use_cases:
+    - uc001-agentic-loop-core

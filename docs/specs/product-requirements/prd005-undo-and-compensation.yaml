@@ -1,0 +1,76 @@
+id: prd005-undo-and-compensation
+title: Undo and Compensation
+
+problem: |
+  Tool calls can produce side effects that must be reversed when a trail is abandoned or a
+  recovery flow is requested. Because tools vary in reversibility, undo behavior must be explicit,
+  mode-aware, and auditable.
+
+goals:
+  - G1: Define explicit undo modes per tool.
+  - G2: Define deterministic reverse-order rollback planning and execution.
+  - G3: Define complete reporting for partial rollback outcomes.
+  - G4: Keep contracts safe for non-reversible tool classes.
+
+requirements:
+  R1:
+    title: Undo Modes
+    items:
+    - R1.1: Each tool descriptor must declare undo mode.
+    - R1.2: Supported undo modes must be none, reversible, compensating, and snapshot.
+    - R1.3: Runtime must reject undo requests requiring unsupported mode behavior.
+  R2:
+    title: Undo Metadata Capture
+    items:
+    - R2.1: Invocation crumbs must store undo token for reversible, compensating, and snapshot modes.
+    - R2.2: Snapshot mode must persist before-state references sufficient for restore.
+    - R2.3: Crumbs without undo metadata must remain visible as non-reversible during rollback.
+  R3:
+    title: Plan Construction
+    items:
+    - R3.1: Undo plans must be constructed from crumbs in reverse chronological order.
+    - R3.2: Undo plans must include only crumbs within requested trail and range.
+    - R3.3: Undo plan steps must include mode and precondition metadata.
+  R4:
+    title: Undo Execution
+    items:
+    - R4.1: UndoManager must execute undo actions in reverse order.
+    - R4.2: Each undo step must produce an undo result record.
+    - R4.3: Undo execution must preserve idempotency where tool contracts support idempotent undo.
+    - R4.4: Undo execution must continue on step failure unless fail-fast is requested.
+  R5:
+    title: Reporting and Audit
+    items:
+    - R5.1: Undo summary must include success, failed, skipped, and non-reversible counts.
+    - R5.2: Undo steps must be persisted as undo crumbs linked to original crumbs.
+    - R5.3: Undo summary must include unresolved side effects.
+non_goals:
+  - Guarantee full rollback for all tool classes.
+  - Implement distributed transaction semantics across external systems.
+  - Redefine primary invocation validation flow.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Undo plans are generated in reverse order with mode annotations.
+    traces: [R3.1, R3.2, R3.3]
+  - id: AC2
+    criterion: Tools in none mode are reported as non-reversible and not invoked for undo.
+    traces: [R1.2, R1.3, R5.1]
+  - id: AC3
+    criterion: Undo execution writes per-step undo crumbs linked to original crumbs.
+    traces: [R4.2, R5.2]
+  - id: AC4
+    criterion: Undo summary includes success, failure, skipped, non-reversible counts, and unresolved side effects.
+    traces: [R5.1, R5.3]
+  - id: AC5
+    criterion: Non-fail-fast mode continues undo after step failures.
+    traces: [R4.4]
+  - id: AC6
+    criterion: Tool registration fails when undo mode is missing or invalid.
+    traces: [R1.1]
+  - id: AC7
+    criterion: Invocation crumbs store required undo metadata for reversible, compensating, and snapshot modes, and explicitly mark non-reversible items.
+    traces: [R2.1, R2.2, R2.3]
+  - id: AC8
+    criterion: Undo execution honors idempotency guarantees for tools that declare idempotent undo.
+    traces: [R4.1, R4.3]

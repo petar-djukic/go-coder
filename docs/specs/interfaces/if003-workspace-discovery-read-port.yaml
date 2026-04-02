@@ -1,0 +1,95 @@
+id: if003-workspace-discovery-read-port
+title: Workspace Discovery Read Port Contract
+component: WorkspaceDiscoveryReadPort
+
+purpose: |
+  Define the outbound port contract for file discovery and retrieval operations
+  used by stitch runtime core.
+
+operations:
+  - name: find_files
+    input:
+      required:
+        - pattern
+      fields:
+        pattern:
+          type: string
+        max_results:
+          type: integer
+          optional: true
+    output:
+      required:
+        - paths
+      fields:
+        paths:
+          type: array
+          items: string
+
+  - name: find_text
+    input:
+      required:
+        - query
+      fields:
+        query:
+          type: string
+        regex:
+          type: boolean
+          default: false
+        include_pattern:
+          type: string
+          optional: true
+        max_results:
+          type: integer
+          optional: true
+    output:
+      required:
+        - matches
+      fields:
+        matches:
+          type: array
+          items:
+            type: object
+            required: [path, line, snippet]
+
+  - name: read_file
+    input:
+      required:
+        - path
+        - start_line
+        - end_line
+      fields:
+        path:
+          type: string
+        start_line:
+          type: integer
+        end_line:
+          type: integer
+    output:
+      required:
+        - content
+      fields:
+        content:
+          type: string
+
+error_codes:
+  - invalid_pattern
+  - invalid_query
+  - file_not_found
+  - range_invalid
+  - out_of_workspace
+
+acceptance_checks:
+  - id: IF3-AC1
+    check: find_files returns deterministic path list for valid pattern.
+  - id: IF3-AC2
+    check: find_text returns anchored matches with file and line information.
+  - id: IF3-AC3
+    check: read_file enforces bounded line ranges and workspace constraints.
+
+traceability:
+  requirements:
+    - prd006-stitch-essential-toolset:R1.2
+    - prd006-stitch-essential-toolset:R1.3
+    - prd007-file-read-search-and-mutation-safety:R1.1
+    - prd007-file-read-search-and-mutation-safety:R1.2
+    - prd007-file-read-search-and-mutation-safety:R1.3

@@ -1,0 +1,42 @@
+id: prd019-memory-summary-prompt-family
+title: Memory and Summary Prompt Family
+problem: |
+  Long-running trails exceed context windows and lose continuity without
+  structured summary and memory prompts.
+
+goals:
+  - G1: Define compaction outputs that preserve technical continuity.
+  - G2: Preserve user intent, decisions, and pending work across turns.
+  - G3: Support bounded context carry-forward in stash and crumbs.
+
+requirements:
+  R1:
+    title: Summary Content
+    items:
+    - R1.1: Prompt must require summaries to include user intent, files touched, and key decisions.
+    - R1.2: Prompt must require summaries to include failures, fixes, and unresolved work.
+    - R1.3: Prompt must preserve recent technical continuity with emphasis on latest changes.
+  R2:
+    title: Compression Quality
+    items:
+    - R2.1: Prompt must require high information density with minimal redundancy.
+    - R2.2: Prompt must require stable structure suitable for reinjection into later turns.
+  R3:
+    title: Memory Injection
+    items:
+    - R3.1: Prompt must support injection of durable conventions without overriding explicit assignment constraints.
+    - R3.2: Prompt must require provenance references for summary source crumbs.
+non_goals:
+  - Define external vector-memory retrieval.
+  - Define archival retention policy outside runtime scope.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Summary prompts preserve intent, technical actions, and unresolved items.
+    traces: [R1.1, R1.2, R1.3]
+  - id: AC2
+    criterion: Compression outputs are dense, structured, and reinjection-ready.
+    traces: [R2.1, R2.2]
+  - id: AC3
+    criterion: Memory injection is constrained by assignment precedence and provenance tracking.
+    traces: [R3.1, R3.2]

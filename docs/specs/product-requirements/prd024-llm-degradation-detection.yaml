@@ -1,0 +1,88 @@
+id: prd024-llm-degradation-detection
+title: LLM Degradation Detection
+
+problem: |
+  LLMs can enter degraded states during multi-turn coding loops. Observed
+  patterns include: emitting 1-2 line edits with build/test after each one,
+  creating files without reading the codebase first, spinning on read-only
+  exploration without making changes, and oscillating between edits that
+  undo each other. No existing coding agent (as of 2026-04) detects these
+  patterns — they rely entirely on hard limits (max_turns, token budgets)
+  which waste remaining budget on unproductive work.
+
+  The loop must always collect per-turn statistics and expose them in the
+  LoopResult. Optionally, it can use those statistics for early termination
+  when degradation thresholds are crossed.
+
+goals:
+  - G1: Define per-turn metrics that characterize LLM productivity.
+  - G2: Define always-on statistics that are reported in every LoopResult.
+  - G3: Define degradation signals with configurable thresholds.
+  - G4: Define the progress_stalled exit reason and its reporting.
+
+requirements:
+  R1:
+    title: Per-Turn Metrics Collection
+    items:
+    - R1.1: Loop must collect TurnMetrics after every turn regardless of configuration.
+    - R1.2: TurnMetrics must include lines_changed (additions + removals from mutation tools).
+    - R1.3: TurnMetrics must include tool_call_count and mutation_count per turn.
+    - R1.4: TurnMetrics must include error_count (tool results with is_error=true).
+    - R1.5: TurnMetrics must include output_tokens from the LLM response.
+    - R1.6: TurnMetrics must include read_count (find_files, find_text, read_file calls).
+    - R1.7: TurnMetrics must include validation_count (build_target, get_errors calls).
+    - R1.8: TurnMetrics must include files_created_without_read — count of write_file calls where the target path was not read (read_file) or discovered (find_files) in the current or preceding 2 turns.
+  R2:
+    title: Always-On Loop Statistics
+    items:
+    - R2.1: LoopResult must include aggregate statistics computed from all TurnMetrics.
+    - R2.2: Aggregate statistics must include total_lines_changed, total_mutations, total_errors, total_turns.
+    - R2.3: Aggregate statistics must include avg_lines_per_mutation_turn — mean lines_changed across turns that had at least one mutation.
+    - R2.4: Aggregate statistics must include read_to_mutate_ratio — total read_count divided by total mutation_count.
+    - R2.5: Aggregate statistics must include validation_to_mutate_ratio — total validation_count divided by total mutation_count.
+    - R2.6: Aggregate statistics must include blind_write_count — sum of files_created_without_read across all turns.
+  R3:
+    title: Degradation Signals
+    items:
+    - R3.1: Signal "declining_edits" — when average lines_changed over a sliding window drops below min_lines_per_turn AND the least-squares slope of lines_changed over the window is at or below slope_threshold.
+    - R3.2: Signal "error_streak" — when error_count is greater than zero for max_consecutive_error_turns consecutive turns from the tail of the window.
+    - R3.3: Signal "read_only_spinning" — when mutation_count is zero for max_readonly_turns consecutive turns while read_count is greater than zero.
+    - R3.4: Signal "blind_creation" — when files_created_without_read exceeds max_blind_writes within the sliding window.
+    - R3.5: Signal "validation_heavy" — when validation_to_mutate_ratio over the window exceeds max_validation_ratio, indicating the model is running build/test far more than it is writing code.
+  R4:
+    title: Convergence Configuration
+    items:
+    - R4.1: All degradation signals must be individually configurable with thresholds.
+    - R4.2: A master enabled flag must control whether signals trigger early termination.
+    - R4.3: When enabled is false, metrics are still collected and statistics still reported — only termination is suppressed.
+    - R4.4: Default configuration must be disabled (enabled=false) so existing loops are unaffected.
+    - R4.5: Window size must be configurable with a minimum of 3 and default of 5.
+  R5:
+    title: Exit and Reporting
+    items:
+    - R5.1: When any degradation signal fires, the loop must exit with progress_stalled.
+    - R5.2: The LoopResult convergence_detail must identify which signal fired and the metric values that triggered it.
+    - R5.3: The orchestrator must be able to distinguish progress_stalled from other exit reasons to select a recovery strategy.
+
+non_goals:
+  - Injecting corrective prompts mid-loop to change LLM behavior.
+  - Modifying tool availability or context during the loop.
+  - Automatic recovery within the loop (recovery is orchestrator responsibility).
+  - Detecting semantic correctness of generated code.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: TurnMetrics are collected after every turn with accurate lines_changed, mutation_count, error_count, read_count, validation_count, and files_created_without_read.
+    traces: [R1.1, R1.2, R1.3, R1.4, R1.5, R1.6, R1.7, R1.8]
+  - id: AC2
+    criterion: LoopResult always includes aggregate statistics regardless of convergence config.
+    traces: [R2.1, R2.2, R2.3, R2.4, R2.5, R2.6]
+  - id: AC3
+    criterion: Each degradation signal fires at the documented threshold and does not fire below it.
+    traces: [R3.1, R3.2, R3.3, R3.4, R3.5]
+  - id: AC4
+    criterion: When enabled is false, no signal triggers early termination but metrics and statistics are still collected and reported.
+    traces: [R4.2, R4.3, R4.4]
+  - id: AC5
+    criterion: progress_stalled exit includes convergence_detail identifying the signal and triggering metric values.
+    traces: [R5.1, R5.2, R5.3]

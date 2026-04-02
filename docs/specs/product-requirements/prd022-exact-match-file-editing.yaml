@@ -1,0 +1,67 @@
+id: prd022-exact-match-file-editing
+title: Exact-Match File Editing
+
+problem: |
+  The agent must edit source files by replacing specific text spans. A naive
+  implementation risks partial writes, ambiguous matches, or corrupted files.
+  This PRD defines the exact-match editing tier: the primary mechanism where
+  old_string must match exactly one location in the file. This tier uses only
+  Go standard library (strings.Count, strings.Replace) and has no external
+  dependencies. It handles the vast majority of LLM-driven edits where the
+  model reproduces the target text verbatim.
+
+goals:
+  - G1: Define the exact-match algorithm for edit_file using Go stdlib only.
+  - G2: Define uniqueness enforcement and error semantics.
+  - G3: Define atomic file write behavior to prevent partial corruption.
+  - G4: Define structured result output for loop continuation.
+
+requirements:
+  R1:
+    title: Exact-Match Algorithm
+    items:
+    - R1.1: edit_file must count occurrences of old_string in the file content using strings.Count.
+    - R1.2: edit_file must reject the edit with edit_no_match when count is zero.
+    - R1.3: edit_file must reject the edit with edit_ambiguous_match when count exceeds one.
+    - R1.4: edit_file must perform a single strings.Replace when count is exactly one.
+    - R1.5: edit_file must treat old_string and new_string as literal text with no regex or pattern interpretation.
+  R2:
+    title: Atomic Write Semantics
+    items:
+    - R2.1: edit_file must write to a temporary file in the same directory and rename atomically.
+    - R2.2: A failed match check must leave the original file unchanged with no temporary artifacts.
+    - R2.3: The temporary file must preserve the original file permissions.
+  R3:
+    title: Workspace Path Boundary
+    items:
+    - R3.1: edit_file must reject paths outside the configured workspace root with out_of_workspace error.
+    - R3.2: edit_file must resolve symlinks before path boundary checks.
+  R4:
+    title: Result and Audit Output
+    items:
+    - R4.1: Successful edits must return a summary including file path, matched line range, and bytes changed.
+    - R4.2: Failed edits must return structured error code, file path, and match count.
+    - R4.3: Every edit_file invocation must emit a crumb record with assignment id, trail id, and call id.
+
+non_goals:
+  - Fuzzy or approximate matching (see prd023).
+  - AST-aware or language-specific transformations.
+  - Multi-file batch replacement in a single invocation.
+  - Regex or glob pattern matching in old_string.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: edit_file replaces exactly one occurrence using strings.Count and strings.Replace with no external dependencies.
+    traces: [R1.1, R1.4, R1.5]
+  - id: AC2
+    criterion: edit_file returns edit_no_match when old_string is absent and edit_ambiguous_match when old_string appears more than once.
+    traces: [R1.2, R1.3]
+  - id: AC3
+    criterion: File writes use temp-file-and-rename to guarantee atomicity with no partial writes on failure.
+    traces: [R2.1, R2.2, R2.3]
+  - id: AC4
+    criterion: Paths outside workspace root are rejected after symlink resolution.
+    traces: [R3.1, R3.2]
+  - id: AC5
+    criterion: Successful and failed edits produce structured results and crumb records.
+    traces: [R4.1, R4.2, R4.3]

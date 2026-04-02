@@ -1,0 +1,43 @@
+id: prd012-context-injection-prompt-family
+title: Context Injection Prompt Family
+problem: |
+  Stitch requires structured context injection so each llm.generate call has
+  stable runtime state, workspace facts, and recent trail evidence. Inconsistent
+  context blocks deterministic execution and reproducibility.
+
+goals:
+  - G1: Define required context blocks for every turn.
+  - G2: Standardize injected environment and instruction context.
+  - G3: Ensure context remains bounded and parse-friendly.
+
+requirements:
+  R1:
+    title: Required Context Blocks
+    items:
+    - R1.1: Prompt must inject assignment id, trail id, and active specification references.
+    - R1.2: Prompt must inject workspace path, platform, and date metadata.
+    - R1.3: Prompt must inject recent crumb summary and latest failure context when present.
+  R2:
+    title: Instruction and Memory Inputs
+    items:
+    - R2.1: Prompt must support injected instruction-file context discovered by orchestrator/runtime.
+    - R2.2: Prompt must support seeded task/file context from entrypoint inputs.
+  R3:
+    title: Bounded Formatting
+    items:
+    - R3.1: Context blocks must use deterministic section labels for parser and audit compatibility.
+    - R3.2: Context injection must support truncation and summarization policies when token budget is exceeded.
+non_goals:
+  - Define long-term memory storage implementation.
+  - Define prompt compression model-specific algorithms.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Every llm.generate turn includes required runtime, workspace, and crumb context sections.
+    traces: [R1.1, R1.2, R1.3]
+  - id: AC2
+    criterion: Instruction and seeded-input context is supported through explicit injection slots.
+    traces: [R2.1, R2.2]
+  - id: AC3
+    criterion: Context format is deterministic and token-budget aware.
+    traces: [R3.1, R3.2]

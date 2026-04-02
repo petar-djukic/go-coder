@@ -1,0 +1,80 @@
+id: prd010-prompt-library-and-composition
+title: Prompt Library and Composition for Stitch Runtime
+
+problem: |
+  Stitch runtime needs a deterministic prompt library to drive specification-to-code
+  generation through the tool loop. Without explicit prompt families, composition rules,
+  and provenance metadata, behavior drifts across trails and becomes hard to audit.
+
+goals:
+  - G1: Define the prompt families required for stitch runtime.
+  - G2: Define runtime prompt composition flow per loop turn.
+  - G3: Define stash-bound prompt configuration and crumb-level provenance.
+  - G4: Define prompt output contracts aligned with tool invocation behavior.
+
+requirements:
+  R1:
+    title: Prompt Family Inventory
+    items:
+    - R1.1: Runtime must define a base system prompt family for role, boundaries, and core behavior.
+    - R1.2: Runtime must define context injection prompts for workspace, trail, and error state.
+    - R1.3: Runtime must define tool usage and output format prompts for parseable tool loop behavior.
+    - R1.4: Runtime must define edit and patch instruction prompts for deterministic code mutation behavior.
+    - R1.5: Runtime must define error recovery and verification prompts for retry and validation flows.
+    - R1.6: Runtime must define optional memory and summary prompts for context compression and continuity.
+  R2:
+    title: Prompt Composition Pipeline
+    items:
+    - R2.1: Prompt composition must assemble base system, context, tool usage, and format sections before llm.generate.
+    - R2.2: Prompt composition must support turn-state overlays for planning, recovery, and verification.
+    - R2.3: Prompt composition must support token-budget-aware summary substitution when context exceeds thresholds.
+    - R2.4: Prompt composition order must be deterministic for equivalent inputs.
+  R3:
+    title: Stash Configuration and Provenance
+    items:
+    - R3.1: Orchestrator-provided tool and environment configuration must include prompt-library configuration inputs for stitch runtime.
+    - R3.2: Stash must bind prompt family references and version identifiers used by a trail.
+    - R3.3: Crumbs for llm.generate calls must persist resolved prompt references used in each turn.
+    - R3.4: Runtime must reject unresolved prompt references with structured error codes.
+  R4:
+    title: Output Contract Alignment
+    items:
+    - R4.1: Prompt formats must align with tool-call parsing expectations used by ToolCallInterpreter.
+    - R4.2: Prompt formats must support actionable branch outputs and terminal outputs for ModelResponseRouter.
+    - R4.3: Prompt instructions must discourage unsupported actions outside stitch runtime scope.
+  R5:
+    title: Boundary and Safety
+    items:
+    - R5.1: Prompt library must not require git lifecycle actions inside stitch runtime.
+    - R5.2: Prompt library must not require multi-agent coordination actions inside stitch runtime.
+    - R5.3: Prompt library must include safety/permission guidance consistent with orchestrator-configured tool allowlists.
+  R6:
+    title: Source Mapping and Maintenance
+    items:
+    - R6.1: Prompt library specification must include source mapping to extracted prompt patterns in the prompt catalog.
+    - R6.2: Each prompt family must declare required inputs and expected output shape.
+    - R6.3: Prompt library changes must be versioned and traceable to affected interfaces and use-cases.
+non_goals:
+  - Define orchestrator internal prompt governance implementation details.
+  - Define provider-specific prompt tokenization algorithms.
+  - Define prompt content for git or merge lifecycle behavior.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Prompt family inventory is defined with essential and optional groups.
+    traces: [R1.1, R1.2, R1.3, R1.4, R1.5, R1.6]
+  - id: AC2
+    criterion: Prompt composition pipeline defines deterministic order and turn-state overlays.
+    traces: [R2.1, R2.2, R2.3, R2.4]
+  - id: AC3
+    criterion: Stash-bound prompt references and crumb-level provenance are required and unresolved references are rejected.
+    traces: [R3.1, R3.2, R3.3, R3.4]
+  - id: AC4
+    criterion: Prompt output contracts align with tool parsing and response routing expectations.
+    traces: [R4.1, R4.2, R4.3]
+  - id: AC5
+    criterion: Prompt library enforces stitch runtime boundaries and safety guidance.
+    traces: [R5.1, R5.2, R5.3]
+  - id: AC6
+    criterion: Prompt families include source mapping, input/output definitions, and versioned maintenance expectations.
+    traces: [R6.1, R6.2, R6.3]

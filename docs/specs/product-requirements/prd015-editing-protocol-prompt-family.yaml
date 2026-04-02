@@ -1,0 +1,35 @@
+id: prd015-editing-protocol-prompt-family
+title: Editing Protocol Prompt Family
+problem: |
+  Stitch must apply code changes deterministically. Editing protocol prompts
+  define strict mutation rules that prevent accidental drift and malformed edits.
+
+goals:
+  - G1: Enforce deterministic patch/edit formats.
+  - G2: Preserve style, indentation, and locality of change.
+  - G3: Prevent unsafe or out-of-scope mutations.
+
+requirements:
+  R1:
+    title: Edit Preconditions
+    items:
+    - R1.1: Prompt must require reading target files before mutation.
+    - R1.2: Prompt must require exact-match search context for replace operations.
+    - R1.3: Prompt must require minimal scoped edits.
+  R2:
+    title: Patch and Style Rules
+    items:
+    - R2.1: Prompt must require preserving existing indentation and formatting style.
+    - R2.2: Prompt must require deterministic patch structure for repeated runs.
+    - R2.3: Prompt must disallow mutation of out-of-workspace targets.
+non_goals:
+  - Define IDE diff rendering.
+  - Define repository formatting policies beyond preservation and local style.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Edit prompts enforce read-before-write, exact-match replacement, and local-change scope.
+    traces: [R1.1, R1.2, R1.3]
+  - id: AC2
+    criterion: Patch rules preserve style and block out-of-workspace mutations.
+    traces: [R2.1, R2.2, R2.3]

@@ -1,0 +1,79 @@
+id: prd009-hexagonal-ports-and-wiring
+title: Hexagonal Ports Adapters and Wiring
+
+problem: |
+  The runtime has clear components, but full hexagonal architecture requires explicit
+  port definitions, adapter classification, dependency direction rules, and runtime
+  composition contracts. Without these, boundaries can erode during implementation.
+
+goals:
+  - G1: Define explicit inbound and outbound ports for stitch runtime.
+  - G2: Classify adapters as driving or driven with stable responsibilities.
+  - G3: Enforce dependency inversion where core depends only on ports.
+  - G4: Define runtime wiring and contract testing model.
+
+requirements:
+  R1:
+    title: Port Definitions
+    items:
+    - R1.1: Runtime must define an inbound AgentInvokePort for prompt-first entry.
+    - R1.2: Runtime must define outbound LLMInvocationPort for llm.generate provider calls.
+    - R1.3: Runtime must define outbound WorkspaceDiscoveryReadPort for find_files find_text and read_file.
+    - R1.4: Runtime must define outbound WorkspaceMutationPort for edit_file and write_file.
+    - R1.5: Runtime must define outbound ValidationPort for build_target and get_errors.
+    - R1.6: Runtime must define outbound StateAuditPorts for trail stash and crumb persistence.
+  R2:
+    title: Adapter Classification
+    items:
+    - R2.1: StitchBoundaryAdapter must be classified as a driving adapter.
+    - R2.2: LLMToolAdapter must be classified as a driven adapter implementing LLMInvocationPort.
+    - R2.3: Workspace and validation adapters must be classified as driven adapters implementing their respective ports.
+    - R2.4: Adapter classification must be documented in component catalog and architecture.
+  R3:
+    title: Dependency Rule
+    items:
+    - R3.1: Core services must depend on port interfaces only and not on adapter concrete implementations.
+    - R3.2: Adapter packages may depend on core port definitions but not on core internals beyond declared contracts.
+    - R3.3: Dependency violations must be detectable by architecture conformance tests.
+  R4:
+    title: Runtime Composition and Wiring
+    items:
+    - R4.1: Runtime wiring must define inbound flow from StitchBoundaryAdapter through AgentInvokePort into AgentLoopOrchestrator.
+    - R4.2: Runtime wiring must define outbound bindings from core services to LLM, workspace, validation, and state ports.
+    - R4.3: Wiring configuration must support replacement of adapter implementations without core logic changes.
+  R5:
+    title: Contract Testing
+    items:
+    - R5.1: Runtime must define port contract test suites for inbound and outbound ports.
+    - R5.2: Each driven adapter must pass the contract test suite for its implemented port.
+    - R5.3: Contract tests must include positive and failure-path scenarios for deterministic behavior.
+  R6:
+    title: PRD Interface References
+    items:
+    - R6.1: PRDs must support interface references through implemented_by and used_by fields.
+    - R6.2: implemented_by and used_by references must resolve to existing interface specifications.
+    - R6.3: Interface relationship direction must be validated for consistency with adapter classification.
+non_goals:
+  - Define orchestrator multi-agent scheduling internals.
+  - Define git workflow operations inside stitch runtime.
+  - Define provider-specific SDK code.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Inbound and outbound ports are explicitly defined and mapped to runtime capabilities.
+    traces: [R1.1, R1.2, R1.3, R1.4, R1.5, R1.6]
+  - id: AC2
+    criterion: Driving and driven adapter classifications are documented and complete.
+    traces: [R2.1, R2.2, R2.3, R2.4]
+  - id: AC3
+    criterion: Dependency inversion rules are stated and conformance checks are defined.
+    traces: [R3.1, R3.2, R3.3]
+  - id: AC4
+    criterion: Runtime wiring specifies inbound and outbound bindings and supports adapter replacement.
+    traces: [R4.1, R4.2, R4.3]
+  - id: AC5
+    criterion: Port contract tests are defined and required for all adapter implementations.
+    traces: [R5.1, R5.2, R5.3]
+  - id: AC6
+    criterion: PRD interface references support implemented_by and used_by with resolution and direction validation rules.
+    traces: [R6.1, R6.2, R6.3]

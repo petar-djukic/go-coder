@@ -1,94 +1,87 @@
-# Copyright (c) 2026 Petar Djukic. All rights reserved.
-# SPDX-License-Identifier: MIT
+id: coding-agent
+title: Coding Agent Roadmap
 
 releases:
   - version: "01.0"
-    name: AST Foundation
-    status: not_started
-    description: >
-      Parse Go source files into ASTs, build a symbol table, and scan
-      repositories in parallel. This phase establishes the structural
-      understanding of Go code that all later phases depend on.
+    name: Agent Runtime Core Contracts
+    status: specs_done
+    depends_on: []
+    description: |
+      Trail lifecycle, stash gating, invocation validation, and undo semantics.
     use_cases:
-      - id: rel01.0-uc001-parse-and-index
-        summary: Parse a Go repository and build a symbol table
-        status: not_started
-
+      - id: rel01.0-uc001-agentic-loop-core
+        summary: Prompt to trail mapping and LLM-as-tool loop routing
+        status: spec_complete
+      - id: rel01.0-uc002-orchestrator-stitch-boundary
+        summary: Orchestrator assignment contract and stitch runtime boundaries
+        status: spec_complete
+      - id: rel01.0-uc003-tool-call-validation
+        summary: Typed and semantic validation before invocation
+        status: spec_complete
+      - id: rel01.0-uc004-undo-compensation-flow
+        summary: Reverse-order rollback and compensation
+        status: spec_complete
+      - id: rel01.0-uc005-trail-state-management
+        summary: Trail activation, completion, and abandonment
+        status: spec_complete
+      - id: rel01.0-uc006-stash-tool-gating
+        summary: Stash-scoped tool eligibility for trail calls
+        status: spec_complete
   - version: "01.1"
-    name: AST Mutation
+    name: Post-Core Validation
     status: not_started
-    description: >
-      Mutate Go ASTs to replace function bodies, modify struct fields,
-      and manage imports. Write mutated trees back to disk with correct
-      formatting and comment preservation.
+    depends_on: ["01.0"]
+    description: |
+      End-to-end contract conformance, essential tool surface, and hexagonal wiring baselines.
     use_cases:
-      - id: rel01.1-uc001-mutate-function-body
-        summary: Replace a function body via AST mutation and write back to disk
-        status: not_started
-
+      - id: rel01.1-uc001-core-contract-validation
+        summary: Contract and traceability validation
+        status: pending
+      - id: rel01.1-uc002-essential-tool-surface
+        summary: Essential toolset and safe file mutation validation
+        status: pending
+      - id: rel01.1-uc003-hexagonal-runtime-wiring
+        summary: Hexagonal ports adapter classification and runtime wiring
+        status: pending
+      - id: rel01.1-uc004-prompt-library-baseline
+        summary: Prompt family inventory composition and provenance contract
+        status: pending
   - version: "02.0"
-    name: Edit Format and Text Edits
+    name: Undo and Compensation Delivery
     status: not_started
-    description: >
-      Parse LLM responses into edit instructions (search/replace blocks).
-      Apply text-based edits to non-Go files with multi-stage matching.
+    depends_on: ["01.0"]
+    description: |
+      Implement and validate rollback and compensation contracts.
     use_cases:
-      - id: rel02.0-uc001-parse-and-apply-edits
-        summary: Parse search/replace blocks from LLM output and apply them to files
-        status: not_started
-
+      - id: rel02.0-uc001-rollback-execution
+        summary: Reverse-order undo planning and execution
+        status: pending
+      - id: rel02.0-uc002-partial-failure-reporting
+        summary: Partial rollback and unresolved side-effect reporting
+        status: pending
   - version: "03.0"
-    name: LLM Integration
+    name: Hardening and Measurable Validation
     status: not_started
-    description: >
-      Connect to AWS Bedrock, construct prompts from repository context,
-      stream responses, and extract edit blocks from the output.
+    depends_on: ["01.0"]
+    description: |
+      Use-case coverage and test-suite baselines for runtime behavior.
     use_cases:
-      - id: rel03.0-uc001-bedrock-prompt-and-stream
-        summary: Send a coding prompt to Bedrock and stream the response
-        status: not_started
-
-  - version: "04.0"
-    name: Feedback Loop
+      - id: rel03.0-uc001-use-case-completion
+        summary: Complete use-case specifications
+        status: pending
+      - id: rel03.0-uc002-test-suite-coverage
+        summary: Complete test-suite specifications
+        status: pending
+      - id: rel03.0-uc003-ports-adapters-contract-tests
+        summary: Ports and adapters contract conformance suite
+        status: pending
+      - id: rel03.0-uc004-llm-degradation-detection
+        summary: Per-turn metrics collection, always-on statistics, and degradation signal detection
+        status: pending
+  - version: "99.0"
+    name: Unscheduled
     status: not_started
-    description: >
-      Run the Go compiler and test suite after edits. Format errors into
-      follow-up prompts and retry up to a configurable limit.
-    use_cases:
-      - id: rel04.0-uc001-compile-test-retry
-        summary: Apply edits, run compiler and tests, retry on failure
-        status: not_started
-
-  - version: "05.0"
-    name: Repository Map
-    status: not_started
-    description: >
-      Extract symbols across all languages using tree-sitter, build a
-      dependency graph, rank files with PageRank, and render a condensed
-      map within a token budget.
-    use_cases:
-      - id: rel05.0-uc001-build-repo-map
-        summary: Build a ranked repository map and render it within token limits
-        status: not_started
-
-  - version: "06.0"
-    name: Git Integration
-    status: not_started
-    description: >
-      Auto-commit after successful edits, handle dirty files, support
-      undo, and generate commit messages.
-    use_cases:
-      - id: rel06.0-uc001-auto-commit-and-undo
-        summary: Auto-commit edits and undo the last commit
-        status: not_started
-
-  - version: "07.0"
-    name: CLI and Orchestrator Integration
-    status: not_started
-    description: >
-      Finalize the public Coder interface, build the test CLI with
-      Cobra/Viper, and validate integration with mage-claude-orchestrator.
-    use_cases:
-      - id: rel07.0-uc001-end-to-end-coding-task
-        summary: Run a complete coding task from prompt to committed code
-        status: not_started
+    depends_on: []
+    description: |
+      Deferred items.
+    use_cases: []

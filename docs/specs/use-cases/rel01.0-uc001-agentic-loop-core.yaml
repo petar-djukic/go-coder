@@ -1,0 +1,53 @@
+id: rel01.0-uc001-agentic-loop-core
+title: Core Agentic Loop
+summary: |
+  Execute the canonical loop where a prompt is mapped to a trail, llm.generate is invoked
+  as a standard tool, and the response is routed to either crumb insertion or next invocation.
+actor: Orchestrator invoking the stitch runtime for code generation
+trigger: Orchestrator sends an assignment envelope with a prompt and trail reference
+flow:
+  - F1: "Receive orchestrator assignment envelope and initialize stitch execution context [StitchBoundaryAdapter]"
+  - F2: "Receive prompt input from user [AgentLoopOrchestrator]"
+  - F3: "Map prompt to existing trail or create a new trail [AgentLoopOrchestrator, TrailManager]"
+  - F4: "Create canonical ToolCall for llm.generate [AgentLoopOrchestrator, ToolCallInterpreter]"
+  - F5: "Validate availability, decode, and semantics [InvocationValidator]"
+  - F6: "Compose prompt from crumb context and stash references, then execute llm.generate with timeout handling [PermissionExecutor, LLMToolAdapter]"
+  - F7: "Route response to terminal or actionable branch [ModelResponseRouter]"
+  - F8: "Terminal branch: insert output crumb and return terminal response [ModelResponseRouter, CrumbLedger]"
+  - F9: "Actionable branch: normalize next tool call, insert next-invocation crumb, continue loop [ModelResponseRouter, ToolCallInterpreter, CrumbLedger]"
+  - F10: "Error — trail resolution fails: reject turn and persist rejection crumb"
+  - F11: "Error — validation fails: reject invocation and persist rejection crumb"
+  - F12: "Error — llm.generate execution fails: persist execution-failed crumb with error metadata"
+  - F13: "Error — llm.generate times out: persist timeout failure crumb and return structured timeout result"
+touchpoints:
+  - T1: "StitchBoundaryAdapter — assignment envelope validation (prd001-tool-system-components-interfaces R1, R4)"
+  - T2: "AgentLoopOrchestrator — prompt to trail mapping and loop control (prd002-trail-lifecycle-state-machine R3)"
+  - T3: "TrailManager — trail creation and activation (prd002-trail-lifecycle-state-machine R1, R2)"
+  - T4: "ToolCallInterpreter — tool call normalization (prd004-tool-invocation-validation R1)"
+  - T5: "InvocationValidator — decode and semantic validation (prd004-tool-invocation-validation R2)"
+  - T6: "PermissionExecutor — execution with OS failure mapping (prd004-tool-invocation-validation R6)"
+  - T7: "LLMToolAdapter — prompt composition and provider invocation (prd001-tool-system-components-interfaces R3)"
+  - T8: "ModelResponseRouter — terminal vs actionable classification (prd001-tool-system-components-interfaces R4)"
+  - T9: "CrumbLedger — invocation crumb persistence (prd001-tool-system-components-interfaces R5)"
+success_criteria:
+  - id: S1
+    criterion: Exactly one primary llm.generate invocation crumb exists per loop turn
+    traces:
+      - prd001-tool-system-components-interfaces AC5
+  - id: S2
+    criterion: Exactly one branch decision exists per loop turn
+    traces:
+      - prd001-tool-system-components-interfaces AC4
+  - id: S3
+    criterion: Prompt provenance for the loop turn is reconstructable from stash references or crumb attachments
+    traces:
+      - prd004-tool-invocation-validation AC1
+  - id: S4
+    criterion: Trail remains auditable for replay and rollback planning
+    traces:
+      - prd002-trail-lifecycle-state-machine AC1
+  - id: S5
+    criterion: Stitch execution result can be returned to orchestrator without git operations in runtime
+    traces:
+      - prd001-tool-system-components-interfaces AC4
+test_suite: test-rel01.0

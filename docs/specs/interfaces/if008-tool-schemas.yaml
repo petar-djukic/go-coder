@@ -1,0 +1,452 @@
+id: if008-tool-schemas
+title: Essential Tool Schemas
+component: ToolRegistry
+
+purpose: |
+  Define MCP-compatible tool schemas for the eight essential tools listed in
+  prd006-stitch-essential-toolset. Each tool has a name, description, and
+  inputSchema (JSON Schema object) that the LLM receives to understand
+  available actions. The ToolRegistry exposes these schemas to the LLM
+  provider via the standard MCP tools list format.
+
+  Each tool is independently testable. The ToolRegistry returns these schemas
+  unmodified; the LLM adapter converts them to provider wire format
+  (Ollama tools array, Bedrock toolConfig).
+
+  Three structures define the tool contract lifecycle:
+
+  1. ToolSchema (this file, tools list): describes the tool to the LLM.
+     Name, description, inputSchema (JSON Schema). Sent in the provider
+     request so the model knows what it can call. Also defined as a type
+     in if010.
+
+  2. ToolCallIntent (if001 LLMToolAdapter): the LLM's request to invoke
+     a tool. Fields: id, name, arguments (parsed JSON object), optional
+     parse_error. Extracted from the provider response by the LLM adapter.
+
+  3. ToolResult (if010, tool_response_format below): the tool's response
+     back to the LLM. Fields: call_id (matches ToolCallIntent.id),
+     tool_name, content (string), is_error (boolean). Appended to message
+     history as a tool-role crumb.
+
+dependencies:
+  - ToolRegistry
+  - InvocationValidator
+  - PermissionExecutor
+
+tool_response_format:
+  description: |
+    All tools return a ToolResponse with the same envelope. This matches the
+    MCP CallToolResult shape.
+  fields:
+    content:
+      type: string
+      description: Human-readable and machine-parseable output text.
+    is_error:
+      type: boolean
+      description: True when the tool execution failed.
+    metadata:
+      type: object
+      optional: true
+      description: Tool-specific structured metadata (counts, diffs, etc.).
+
+tools:
+  - name: find_files
+    description: |
+      Find files by glob pattern. Returns matching file paths relative to the
+      workspace root. Use this to discover project structure before reading
+      files. Supports standard glob syntax: * (any chars), ** (recursive),
+      ? (single char), [] (character class).
+    inputSchema:
+      type: object
+      properties:
+        pattern:
+          type: string
+          description: |
+            Glob pattern to match against file paths. Examples:
+            "**/*.go", "internal/**/test_*.go", "docs/**/*.yaml".
+        path:
+          type: string
+          description: |
+            Directory to search in. Defaults to workspace root.
+            Must be within workspace boundaries.
+        max_results:
+          type: integer
+          description: Maximum number of matches to return. Default 100.
+          default: 100
+      required:
+        - pattern
+    output_metadata:
+      number_of_files:
+        type: integer
+      truncated:
+        type: boolean
+
+  - name: find_text
+    description: |
+      Search file contents for a text pattern. Returns matching lines with
+      file paths and line numbers. Supports exact string and regex patterns.
+      Use this to find specific code, function definitions, or references.
+    inputSchema:
+      type: object
+      properties:
+        query:
+          type: string
+          description: |
+            The text or regex pattern to search for. Case-insensitive
+            by default.
+        is_regexp:
+          type: boolean
+          description: Whether query is a regex pattern. Default false.
+          default: false
+        include_pattern:
+          type: string
+          description: |
+            Glob pattern to filter which files to search. Example:
+            "**/*.go" to search only Go files.
+        max_results:
+          type: integer
+          description: Maximum number of matching lines to return. Default 50.
+          default: 50
+      required:
+        - query
+    output_metadata:
+      total_matches:
+        type: integer
+      files_searched:
+        type: integer
+      truncated:
+        type: boolean
+
+  - name: read_file
+    description: |
+      Read the contents of a file. Supports bounded reads with start and end
+      line numbers. Always use this to verify current file state before making
+      edits. Returns file content with line numbers.
+    inputSchema:
+      type: object
+      properties:
+        path:
+          type: string
+          description: |
+            Absolute or workspace-relative path to the file to read.
+        start_line:
+          type: integer
+          description: First line to read (1-based, inclusive). Default 1.
+          default: 1
+        end_line:
+          type: integer
+          description: |
+            Last line to read (1-based, inclusive). Default reads to end
+            of file. Prefer reading larger sections over many small reads.
+      required:
+        - path
+    output_metadata:
+      total_lines:
+        type: integer
+      bytes_read:
+        type: integer
+
+  - name: write_file
+    description: |
+      Create or overwrite a file with the given content. The entire file
+      content must be provided. Use this for new files or complete rewrites.
+      For targeted edits to existing files, prefer edit_file.
+    inputSchema:
+      type: object
+      properties:
+        path:
+          type: string
+          description: |
+            Absolute or workspace-relative path to the file to write.
+            Parent directories are created if they do not exist.
+        content:
+          type: string
+          description: The complete file content to write.
+      required:
+        - path
+        - content
+    output_metadata:
+      bytes_written:
+        type: integer
+      created:
+        type: boolean
+        description: True if the file was newly created, false if overwritten.
+
+  - name: edit_file
+    description: |
+      Edit an existing file by replacing one occurrence of old_string with
+      new_string. This is the primary mechanism for modifying source code.
+      The old_string must match exactly one location in the file (including
+      whitespace and indentation). Include 3-5 lines of unchanged context
+      before and after the target text to ensure a unique match. Fails if
+      old_string matches zero or multiple locations.
+
+      For new files, use write_file instead. Always read_file first to see
+      the current state before editing.
+    inputSchema:
+      type: object
+      properties:
+        path:
+          type: string
+          description: |
+            Absolute or workspace-relative path to the file to edit.
+            The file must already exist.
+        old_string:
+          type: string
+          description: |
+            The exact text to find and replace. Must match exactly one
+            location in the file, including all whitespace, indentation,
+            and newlines. Include 3-5 lines of context before and after
+            the target change to uniquely identify the location.
+        new_string:
+          type: string
+          description: |
+            The replacement text. To delete code, use an empty string.
+            The replacement must produce syntactically valid code.
+      required:
+        - path
+        - old_string
+        - new_string
+    output_metadata:
+      additions:
+        type: integer
+      removals:
+        type: integer
+      diff:
+        type: string
+        description: Unified diff of the change for audit trail.
+
+  - name: run_command
+    description: |
+      Execute a shell command in a persistent session. Use this for
+      running tests, build commands, and inspecting system state. The shell
+      session preserves environment variables and working directory across
+      calls. Commands must complete within the timeout.
+    inputSchema:
+      type: object
+      properties:
+        command:
+          type: string
+          description: |
+            The shell command to execute. Use && to chain commands.
+            Avoid interactive commands that require stdin input.
+        timeout:
+          type: integer
+          description: |
+            Timeout in milliseconds. Default 30000 (30 seconds).
+            Maximum 600000 (10 minutes).
+          default: 30000
+      required:
+        - command
+    output_metadata:
+      exit_code:
+        type: integer
+      duration_ms:
+        type: integer
+
+  - name: build_target
+    description: |
+      Execute a mage build target by name. Used for running tests, linting,
+      building, and other project-defined automation. The orchestrator
+      configures mage with language-appropriate targets. Only targets on
+      the allowlist can be executed. Returns stdout, stderr, and exit code.
+    inputSchema:
+      type: object
+      properties:
+        target:
+          type: string
+          description: |
+            Mage target to execute. Example: "test:unit", "lint", "build".
+            Must be on the configured allowlist.
+        timeout_ms:
+          type: integer
+          description: |
+            Maximum execution time in milliseconds. Default 120000
+            (2 minutes). Maximum 600000 (10 minutes).
+          default: 120000
+      required:
+        - target
+    output_metadata:
+      exit_code:
+        type: integer
+      duration_ms:
+        type: integer
+
+  - name: get_errors
+    description: |
+      Get compiler errors, lint warnings, and other diagnostics for the given
+      file paths. If no paths are specified, returns diagnostics for all files
+      with errors. Use this after making code changes to verify correctness.
+    inputSchema:
+      type: object
+      properties:
+        paths:
+          type: array
+          items:
+            type: string
+          description: |
+            File paths to check. If empty, checks all files with known errors.
+      required: []
+    output_metadata:
+      error_count:
+        type: integer
+      warning_count:
+        type: integer
+      files_checked:
+        type: integer
+
+  - name: ask_user
+    description: |
+      Request guidance from a human or another agent. Use this when you
+      face an ambiguous decision that the specification does not clearly resolve:
+      architectural trade-offs, unclear requirements, naming choices that affect
+      public API, or situations where multiple valid approaches exist.
+
+      The tool writes the question to the trail and waits for a response. If a
+      human or agent is available, they respond with guidance. If nobody responds
+      within the timeout, the tool returns an error. When this tool returns an
+      error, proceed with your best judgment and document your reasoning.
+
+      Do not use this tool for questions you can answer by reading the codebase
+      or specification. Only use it for genuinely ambiguous decisions.
+    inputSchema:
+      type: object
+      properties:
+        question:
+          type: string
+          description: |
+            The specific question requiring guidance. Be precise: state what
+            decision you face, what options you see, and why you cannot decide
+            from the specification alone.
+        context:
+          type: string
+          description: |
+            Relevant context: file paths, code snippets, specification excerpts,
+            or prior tool outputs that inform the decision.
+        options:
+          type: array
+          items:
+            type: string
+          description: |
+            The options you are considering. Each entry is a brief description
+            of one approach. If you have a preferred option, list it first.
+        urgency:
+          type: string
+          enum:
+            - blocking
+            - preferred
+          description: |
+            blocking: the decision blocks further progress. The loop should
+            wait up to the full timeout for a response.
+            preferred: the decision improves quality but is not blocking. The
+            loop waits for a shorter period before falling back.
+          default: preferred
+      required:
+        - question
+    output_metadata:
+      responder:
+        type: string
+        description: Who responded (human, agent name, or self if fallback).
+      response_time_ms:
+        type: integer
+    mechanism: |
+      The ask_user tool writes a crumb to the loop trail with the question
+      payload. The crumb is observable via the cupboard by the orchestrator,
+      a human operator monitoring the trail, or a peer agent.
+
+      The responder writes a response to a stash scoped_to the loop trail.
+      The tool polls this stash until a response appears or the timeout
+      expires.
+
+      Timeout defaults:
+        blocking: 300 seconds (5 minutes)
+        preferred: 30 seconds
+
+      When timeout expires with no response, the tool returns is_error=true
+      with content explaining that no responder was available. The system
+      prompt instructs the model to proceed with its best judgment and
+      document the reasoning in a comment.
+
+  - name: llm.generate
+    description: |
+      Internal tool: invoke the LLM provider. This tool is not exposed to the
+      model directly. The AgentLoopOrchestrator uses it to call the LLM with
+      the current message history and available tools. Defined here for
+      completeness — the schema is the LLMInvocationRequest from if001.
+    internal: true
+    inputSchema:
+      type: object
+      properties:
+        prompt_references:
+          type: array
+          items:
+            type: object
+          description: References to stash or crumb attachments.
+        inline_prompt:
+          type: string
+          description: Direct prompt text (alternative to references).
+      required: []
+
+error_codes:
+  - tool_not_found
+  - tool_not_allowed
+  - tool_input_invalid
+  - tool_execution_failed
+  - tool_timeout
+  - workspace_boundary_violation
+  - edit_no_match
+  - edit_ambiguous_match
+  - file_not_found
+  - target_not_on_allowlist
+
+acceptance_checks:
+  - id: IF8-AC1
+    check: |
+      ToolRegistry returns all non-internal tool schemas in MCP-compatible
+      format: name, description, inputSchema with JSON Schema properties.
+  - id: IF8-AC2
+    check: |
+      Each tool can be executed independently with valid input and returns
+      a ToolResponse with content string and is_error boolean.
+  - id: IF8-AC3
+    check: |
+      Mutation tools (write_file, edit_file) enforce workspace path
+      boundaries and fail with workspace_boundary_violation when violated.
+  - id: IF8-AC4
+    check: |
+      edit_file fails with edit_no_match when old_string is not found in
+      the file, and edit_ambiguous_match when old_string matches more than
+      one location. No file modification occurs on either failure.
+  - id: IF8-AC5
+    check: |
+      build_target rejects targets not on the allowlist with
+      target_not_on_allowlist error code.
+  - id: IF8-AC6
+    check: |
+      run_command and build_target enforce timeout and return tool_timeout
+      when the command exceeds the limit.
+  - id: IF8-AC7
+    check: |
+      llm.generate is marked internal and not included in the tool list
+      sent to the LLM provider.
+
+traceability:
+  requirements:
+    - prd006-stitch-essential-toolset:R1.1
+    - prd006-stitch-essential-toolset:R1.2
+    - prd006-stitch-essential-toolset:R1.3
+    - prd006-stitch-essential-toolset:R1.4
+    - prd006-stitch-essential-toolset:R1.5
+    - prd006-stitch-essential-toolset:R2.1
+    - prd006-stitch-essential-toolset:R2.2
+    - prd006-stitch-essential-toolset:R2.3
+    - prd006-stitch-essential-toolset:R4.1
+    - prd006-stitch-essential-toolset:R4.2
+    - prd006-stitch-essential-toolset:R4.3
+    - prd001-tool-system-components-interfaces:R2.1
+    - prd001-tool-system-components-interfaces:R3.1
+    - prd004-tool-invocation-validation:R1.1
+    - prd004-tool-invocation-validation:R3.1
+  use_cases:
+    - rel01.0-uc001-agentic-loop-core

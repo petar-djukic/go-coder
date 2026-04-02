@@ -1,0 +1,26 @@
+id: rel01.1-uc003-hexagonal-runtime-wiring
+title: Hexagonal Runtime Wiring
+summary: |
+  Validate that the runtime core depends only on port interfaces and that adapters
+  implement port contracts. Verify adapter replacement without core rewrites.
+actor: Developer configuring runtime adapters
+trigger: Runtime initialization with port and adapter bindings
+flow:
+  - F1: "Configure inbound port binding: StitchBoundaryAdapter implements AgentInvokePort"
+  - F2: "Configure outbound port bindings: LLMToolAdapter, WorkspaceDiscoveryAdapter, WorkspaceMutationAdapter, ValidationAdapter, StateAuditAdapter implement their respective ports"
+  - F3: "Initialize runtime with port bindings; core services receive port references only"
+  - F4: "Execute a loop turn through the wired ports to validate end-to-end data flow"
+  - F5: "Replace one adapter with a test double and verify core behavior is unchanged"
+touchpoints:
+  - T1: "AgentLoopOrchestrator — depends on ports only (prd009-hexagonal-ports-and-wiring R1, R2)"
+  - T2: "Port interfaces — LLMInvocationPort, WorkspaceDiscoveryReadPort, WorkspaceMutationPort, ValidationPort, StateAuditPorts (prd009-hexagonal-ports-and-wiring R3)"
+success_criteria:
+  - id: S1
+    criterion: Core domain services compile and run with port interfaces only, no adapter imports
+    traces:
+      - prd009-hexagonal-ports-and-wiring AC1
+  - id: S2
+    criterion: Replacing an adapter with a test double does not require core code changes
+    traces:
+      - prd009-hexagonal-ports-and-wiring AC2
+test_suite: test-rel01.1

@@ -1,0 +1,44 @@
+id: prd011-system-behavior-prompt-family
+title: System Behavior Prompt Family
+problem: |
+  Stitch needs a stable system behavior prompt family that defines role, scope,
+  and execution posture. Without a strict baseline, behavior drifts across trails
+  and can conflict with runtime boundaries.
+
+goals:
+  - G1: Define a deterministic base role and behavior contract.
+  - G2: Enforce stitch-only scope boundaries in all composed prompts.
+  - G3: Preserve concise, implementation-oriented communication style.
+
+requirements:
+  R1:
+    title: Role and Scope
+    items:
+    - R1.1: System behavior prompt must define stitch as a specification-to-code runtime agent.
+    - R1.2: System behavior prompt must explicitly disallow git lifecycle and multi-agent orchestration actions.
+    - R1.3: System behavior prompt must require completion-oriented execution until task is resolved or blocked.
+  R2:
+    title: Engineering Posture
+    items:
+    - R2.1: Prompt must require precise and minimal edits aligned with repository conventions.
+    - R2.2: Prompt must require avoiding unrelated modifications.
+    - R2.3: Prompt must require preference for root-cause fixes over superficial patches.
+  R3:
+    title: Communication Contract
+    items:
+    - R3.1: Prompt must require concise, direct responses focused on requested outcomes.
+    - R3.2: Prompt must require explicit reporting when assumptions or blockers are present.
+non_goals:
+  - Define model-provider-specific token limits.
+  - Define tool argument schemas.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: System behavior prompt enforces stitch role, scope boundaries, and completion posture.
+    traces: [R1.1, R1.2, R1.3]
+  - id: AC2
+    criterion: Prompt codifies minimal-change engineering posture and unrelated-change avoidance.
+    traces: [R2.1, R2.2, R2.3]
+  - id: AC3
+    criterion: Prompt codifies concise communication and explicit blocker reporting.
+    traces: [R3.1, R3.2]

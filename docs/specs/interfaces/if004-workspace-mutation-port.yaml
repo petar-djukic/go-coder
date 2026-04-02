@@ -1,0 +1,87 @@
+id: if004-workspace-mutation-port
+title: Workspace Mutation Port Contract
+component: WorkspaceMutationPort
+
+purpose: |
+  Define the outbound port contract for deterministic workspace mutation
+  operations used by stitch runtime core.
+
+operations:
+  - name: edit_file
+    input:
+      required:
+        - path
+        - old_string
+        - new_string
+      fields:
+        path:
+          type: string
+        old_string:
+          type: string
+          description: Exact text to find. Must match exactly one location.
+        new_string:
+          type: string
+          description: Replacement text. Empty string deletes the match.
+    output:
+      required:
+        - success
+      fields:
+        success:
+          type: boolean
+        diff:
+          type: string
+        summary:
+          type: string
+
+  - name: write_file
+    input:
+      required:
+        - path
+        - content
+      fields:
+        path:
+          type: string
+        content:
+          type: string
+        mode:
+          type: string
+          allowed:
+            - create
+            - overwrite
+    output:
+      required:
+        - success
+      fields:
+        success:
+          type: boolean
+        summary:
+          type: string
+
+error_codes:
+  - out_of_workspace
+  - edit_no_match
+  - edit_ambiguous_match
+  - path_not_found
+  - mode_violation
+
+acceptance_checks:
+  - id: IF4-AC1
+    check: edit_file replaces exactly one occurrence of old_string with new_string.
+  - id: IF4-AC2
+    check: mutation failures leave files unchanged.
+  - id: IF4-AC3
+    check: write_file enforces create or overwrite mode semantics.
+  - id: IF4-AC4
+    check: out-of-workspace paths are rejected.
+  - id: IF4-AC5
+    check: edit_file returns edit_no_match when old_string is not found.
+  - id: IF4-AC6
+    check: edit_file returns edit_ambiguous_match when old_string matches multiple locations.
+
+traceability:
+  requirements:
+    - prd006-stitch-essential-toolset:R1.4
+    - prd007-file-read-search-and-mutation-safety:R2.1
+    - prd007-file-read-search-and-mutation-safety:R2.2
+    - prd007-file-read-search-and-mutation-safety:R2.3
+    - prd007-file-read-search-and-mutation-safety:R3.2

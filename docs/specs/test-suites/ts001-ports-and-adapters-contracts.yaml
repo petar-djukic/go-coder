@@ -1,0 +1,56 @@
+id: ts001-ports-and-adapters-contracts
+title: Ports and Adapters Contract Test Suite
+
+purpose: |
+  Validate that all driving and driven adapters conform to declared port
+  contracts and preserve dependency inversion boundaries.
+
+scope:
+  interfaces:
+    - if001-llm-tool-adapter
+    - if002-agent-invoke-interface
+    - if003-workspace-discovery-read-port
+    - if004-workspace-mutation-port
+    - if005-validation-port
+    - if006-state-and-audit-ports
+
+test_groups:
+  - id: TG1
+    name: Inbound invoke contract
+    checks:
+      - validate prompt-first invoke request and response shape
+      - reject invalid assignment or missing prompt
+  - id: TG2
+    name: Workspace discovery and mutation contracts
+    checks:
+      - verify find_files, find_text, read_file contracts
+      - verify edit_file and write_file success and failure paths
+      - verify out-of-workspace rejection and no-partial-write behavior
+  - id: TG3
+    name: Validation and diagnostics contracts
+    checks:
+      - verify allowlist enforcement for build_target
+      - verify deterministic status and exit code model
+      - verify diagnostics scope behavior
+  - id: TG4
+    name: State and audit contracts
+    checks:
+      - verify trail and stash error model
+      - verify crumb correlation metadata
+  - id: TG5
+    name: Dependency inversion conformance
+    checks:
+      - verify core references port interfaces only
+      - verify adapters implement declared ports
+
+success_criteria:
+  - All contract checks pass for configured adapter implementations.
+  - Failure-path behavior is deterministic and normalized.
+  - Dependency rule violations are detected and reported.
+
+traceability:
+  requirements:
+    - prd009-hexagonal-ports-and-wiring:R3.3
+    - prd009-hexagonal-ports-and-wiring:R5.1
+    - prd009-hexagonal-ports-and-wiring:R5.2
+    - prd009-hexagonal-ports-and-wiring:R5.3

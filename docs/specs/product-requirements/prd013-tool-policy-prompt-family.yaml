@@ -1,0 +1,42 @@
+id: prd013-tool-policy-prompt-family
+title: Tool Policy Prompt Family
+problem: |
+  Stitch depends on strict tool policy prompts to keep invocation behavior
+  deterministic, safe, and aligned with configured tool inventory.
+
+goals:
+  - G1: Define precedence and selection rules for available tools.
+  - G2: Prevent unsupported invocation patterns.
+  - G3: Encode edit-tool prerequisites and safety checks.
+
+requirements:
+  R1:
+    title: Tool Selection Rules
+    items:
+    - R1.1: Prompt must require using dedicated registered tools over equivalent shell commands.
+    - R1.2: Prompt must require rejecting actions that depend on unavailable tools with structured limitation output.
+    - R1.3: Prompt must require respecting orchestrator allowlist constraints.
+  R2:
+    title: Invocation Discipline
+    items:
+    - R2.1: Prompt must require explicit tool intent and arguments prior to invocation.
+    - R2.2: Prompt must require reading and validating target files before mutation tools.
+  R3:
+    title: Deterministic Outcomes
+    items:
+    - R3.1: Prompt must avoid ambiguous phrasing that allows multiple incompatible invocation strategies.
+    - R3.2: Prompt must encode retry policy hooks for tool-call failure handling.
+non_goals:
+  - Define tool implementation internals.
+  - Define orchestrator-side tool registration UX.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Prompt enforces tool precedence, availability checks, and allowlist compliance.
+    traces: [R1.1, R1.2, R1.3]
+  - id: AC2
+    criterion: Prompt enforces invocation discipline with explicit intent and pre-mutation checks.
+    traces: [R2.1, R2.2]
+  - id: AC3
+    criterion: Prompt language is deterministic and includes failure-policy hooks.
+    traces: [R3.1, R3.2]

@@ -1,0 +1,98 @@
+id: legacy-prd-reconciliation
+title: Legacy PRD Reconciliation and Cleanup Decisions
+status: applied
+updated: 2026-03-31
+
+intent: |
+  Remove duplicate normative content from legacy markdown PRDs under prds/
+  and keep docs/specs as the single canonical specification source.
+
+decisions:
+  - legacy_file: prds/tool-system-components-interfaces.md
+    status: superseded
+    canonical_docs:
+      - docs/specs/product-requirements/prd001-tool-system-components-interfaces.yaml
+      - docs/specs/interfaces/if001-llm-tool-adapter.yaml
+      - docs/specs/interfaces/if003-workspace-discovery-read-port.yaml
+      - docs/specs/interfaces/if004-workspace-mutation-port.yaml
+      - docs/specs/interfaces/if005-validation-port.yaml
+      - docs/specs/interfaces/if006-state-and-audit-ports.yaml
+    action: removed_after_migration
+
+  - legacy_file: prds/trail-lifecycle-state-machine.md
+    status: superseded
+    canonical_docs:
+      - docs/specs/product-requirements/prd002-trail-lifecycle-state-machine.yaml
+      - docs/specs/use-cases/uc001-agentic-loop-core.yaml
+    action: removed_after_migration
+
+  - legacy_file: prds/tool-stash-availability.md
+    status: superseded
+    canonical_docs:
+      - docs/specs/product-requirements/prd003-tool-stash-availability.yaml
+      - docs/specs/interfaces/if006-state-and-audit-ports.yaml
+    action: removed_after_migration
+
+  - legacy_file: prds/tool-invocation-validation.md
+    status: superseded
+    canonical_docs:
+      - docs/specs/product-requirements/prd004-tool-invocation-validation.yaml
+      - docs/specs/use-cases/uc001-agentic-loop-core.yaml
+    action: removed_after_migration
+
+  - legacy_file: prds/undo-and-compensation.md
+    status: superseded
+    canonical_docs:
+      - docs/specs/product-requirements/prd005-undo-and-compensation.yaml
+    action: removed_after_migration
+
+  - legacy_file: prds/agent-loop-tool-invocation.md
+    status: partially_migrated
+    canonical_docs:
+      - docs/specs/product-requirements/prd004-tool-invocation-validation.yaml
+      - docs/specs/product-requirements/prd006-stitch-essential-toolset.yaml
+      - docs/specs/use-cases/uc001-agentic-loop-core.yaml
+    unique_residue:
+      - response_type_taxonomy_detail
+      - hybrid_scheduler_detail
+      - explicit_text_parser_mode_matrix
+    decision: remove_legacy_file_and_track_residue_for_future_extraction
+
+  - legacy_file: prds/workflow-execution-loop.md
+    status: partially_migrated
+    canonical_docs:
+      - docs/ARCHITECTURE.yaml
+      - docs/specs/use-cases/uc001-agentic-loop-core.yaml
+      - docs/specs/use-cases/uc002-orchestrator-stitch-boundary.yaml
+      - docs/specs/use-cases/uc003-hexagonal-runtime-wiring.yaml
+    unique_residue:
+      - detailed_workflow_switch_policy_examples
+      - explicit_control_plane_vs_proposal_plane_table
+    decision: remove_legacy_file_and_track_residue_for_use_case_expansion
+
+  - legacy_file: prds/glob-tool.md
+    status: partially_migrated
+    canonical_docs:
+      - docs/specs/product-requirements/prd006-stitch-essential-toolset.yaml
+      - docs/specs/product-requirements/prd007-file-read-search-and-mutation-safety.yaml
+      - docs/specs/interfaces/if003-workspace-discovery-read-port.yaml
+    unique_residue:
+      - backend_adapter_examples_for_rg
+      - backend_swap_invariance_examples
+    decision: remove_legacy_file_and_move_backend_examples_to_non_normative_implementation_notes
+
+  - legacy_file: prds/coding-agents-architecture-prompts-workflow.md
+    status: reclassified
+    canonical_docs:
+      - docs/specs/prompt-library/prompt-extraction-and-taxonomy.yaml
+      - docs/specs/product-requirements/prd010-prompt-library-and-composition.yaml
+      - docs/specs/product-requirements/prd021-comparative-agent-conformance-baseline.yaml
+      - docs/specs/use-cases/uc004-comparative-conformance-evaluation.yaml
+      - docs/specs/test-suites/ts002-comparative-conformance-baseline.yaml
+    decision: retain_research_and_extract_normative_baseline
+
+policy:
+  - prds/ no longer carries legacy normative pointers.
+  - prds/coding-agents-architecture-prompts-workflow.md is retained as a research artifact.
+  - docs/specs/ is the canonical normative source.
+  - new normative requirements must be added in docs/specs/, not prds/.

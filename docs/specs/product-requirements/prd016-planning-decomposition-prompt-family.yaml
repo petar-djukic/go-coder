@@ -1,0 +1,41 @@
+id: prd016-planning-decomposition-prompt-family
+title: Planning and Decomposition Prompt Family
+problem: |
+  Complex tasks require explicit decomposition and branching logic. Without a
+  planning prompt family, tool execution can become inefficient or inconsistent.
+
+goals:
+  - G1: Define when and how plans are produced.
+  - G2: Define fallback behavior for ambiguous requests.
+  - G3: Keep decomposition directly actionable for tool-loop execution.
+
+requirements:
+  R1:
+    title: Plan Triggering
+    items:
+    - R1.1: Prompt must instruct planning for multi-step or high-risk tasks.
+    - R1.2: Prompt must allow direct execution for trivial clear tasks.
+  R2:
+    title: Plan Shape
+    items:
+    - R2.1: Plan output must be ordered, dependency-aware, and concise.
+    - R2.2: Plan must include expected validation checkpoints.
+  R3:
+    title: Ambiguity Handling
+    items:
+    - R3.1: Prompt must require concise clarifying questions when task intent is unclear.
+    - R3.2: Prompt must require waiting for new evidence after each command/observation cycle when configured.
+non_goals:
+  - Define long-range project management workflows.
+  - Define orchestrator multi-agent planning.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Planning prompt defines clear triggers for staged decomposition vs direct execution.
+    traces: [R1.1, R1.2]
+  - id: AC2
+    criterion: Plan outputs are ordered, dependency-aware, and validation-aware.
+    traces: [R2.1, R2.2]
+  - id: AC3
+    criterion: Ambiguity and command-observation loop handling are explicitly defined.
+    traces: [R3.1, R3.2]

@@ -1,0 +1,95 @@
+id: prd021-comparative-agent-conformance-baseline
+title: Comparative Agent Conformance Baseline
+
+problem: |
+  The comparative architecture review identifies recurring design patterns across
+  coding-agent implementations, but the findings are currently non-normative.
+  Stitch runtime needs these findings translated into enforceable requirements to
+  prevent architectural drift and to keep prompt, parser, tool, and workflow
+  behavior aligned with proven runtime patterns.
+
+goals:
+  - G1: Convert comparative findings into a normative conformance baseline.
+  - G2: Define required runtime control-plane ownership boundaries.
+  - G3: Define minimum prompt, parser, and tool exposure contracts.
+  - G4: Define required file-selection, edit, and verification loop behavior.
+  - G5: Define measurable evaluation criteria for architecture choices.
+
+requirements:
+  R1:
+    title: Runtime Control-Plane Ownership
+    items:
+    - R1.1: Runtime must remain authoritative for permission decisions, execution gating, and terminal-state decisions.
+    - R1.2: LLM role must be constrained to action proposal and response generation, not direct execution authority.
+    - R1.3: Runtime must enforce retry budgets and recovery policy independently of model preference.
+  R2:
+    title: Prompt System Baseline
+    items:
+    - R2.1: Prompt composition must be modular with distinct sections for role behavior, context injection, tool policy, output format, recovery, and verification.
+    - R2.2: Prompt composition must support mode overlays without changing safety boundaries.
+    - R2.3: Prompt system must support bounded memory and summary injection for long-running loops.
+  R3:
+    title: Output Parsing and Action Interpretation
+    items:
+    - R3.1: "Runtime must support at least two action-interpretation modes: provider-native structured calls and parser-constrained text output."
+    - R3.2: Runtime must classify malformed outputs and emit structured correction feedback to the model.
+    - R3.3: Runtime must enforce capped re-query behavior for repeated malformed outputs.
+  R4:
+    title: Dynamic Tool Exposure
+    items:
+    - R4.1: Runtime must compute an effective per-turn tool subset rather than always exposing the full declared tool universe.
+    - R4.2: Tool subset computation must consider permission policy, runtime mode, model capability, and session state.
+    - R4.3: Tool descriptors must expose stable names and machine-readable schemas for model-facing tool contracts.
+  R5:
+    title: File Selection and Edit Lifecycle
+    items:
+    - R5.1: Runtime loop must enforce discovery and read-before-edit sequencing for code changes.
+    - R5.2: Runtime must support structured edit operations for targeted edits, patch-based edits, and file writes.
+    - R5.3: Mutation flow must preserve runtime safety constraints and deterministic error handling.
+  R6:
+    title: Verification Feedback Loop
+    items:
+    - R6.1: Runtime must require post-mutation validation execution when validation tooling is configured.
+    - R6.2: Diagnostics and validation failures must be fed back into subsequent loop decisions.
+    - R6.3: Runtime must prevent terminal success state when critical verification failures remain unresolved.
+  R7:
+    title: Capability Profiling
+    items:
+    - R7.1: Runtime must support capability profiles for language and task specialization without changing core loop semantics.
+    - R7.2: Profiles may adjust prompt overlays, tool defaults, and validation targets while preserving baseline safety and parser contracts.
+  R8:
+    title: Comparative Evaluation Metrics
+    items:
+    - R8.1: Runtime evaluation suite must measure first-pass correctness and repair-turn count.
+    - R8.2: Runtime evaluation suite must measure tool misuse rate and validation pass rate.
+    - R8.3: Runtime evaluation suite must measure change quality using diff minimality and policy compliance checks.
+non_goals:
+  - Define source-code-level implementation details for each referenced coding-agent.
+  - Define vendor or SDK internals outside stitch runtime boundaries.
+  - Replace existing tool, prompt-family, or ports-and-adapters PRDs.
+
+acceptance_criteria:
+  - id: AC1
+    criterion: Baseline specifies runtime-vs-model authority boundaries and recovery budget ownership.
+    traces: [R1.1, R1.2, R1.3]
+  - id: AC2
+    criterion: Baseline specifies modular prompt composition with bounded memory and overlay behavior.
+    traces: [R2.1, R2.2, R2.3]
+  - id: AC3
+    criterion: Baseline specifies dual parsing modes with structured malformed-output recovery.
+    traces: [R3.1, R3.2, R3.3]
+  - id: AC4
+    criterion: Baseline specifies dynamic per-turn tool exposure and schema-stable descriptors.
+    traces: [R4.1, R4.2, R4.3]
+  - id: AC5
+    criterion: Baseline specifies mandatory discovery/read-before-edit sequencing and structured mutation modes.
+    traces: [R5.1, R5.2, R5.3]
+  - id: AC6
+    criterion: Baseline specifies mandatory verification feedback and terminal-state guardrails.
+    traces: [R6.1, R6.2, R6.3]
+  - id: AC7
+    criterion: Baseline specifies specialization profiles that preserve safety and parser invariants.
+    traces: [R7.1, R7.2]
+  - id: AC8
+    criterion: Baseline specifies measurable comparative evaluation metrics for correctness, misuse, validation, and diff quality.
+    traces: [R8.1, R8.2, R8.3]
