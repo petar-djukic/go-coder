@@ -1,13 +1,16 @@
-id: agent-runtime
-title: Agent Runtime Vision
+id: press
+title: Press Vision
 
 executive_summary: |
-  We build an agent runtime where workflows are tracked as trails, tool execution attempts
-  are tracked as crumbs, and tool availability is scoped by stashes.
+  Press is the agent runtime that turns specifications into code. Cobbler composes the work,
+  crumbs holds the pieces, and press prints the output — like a printing press transferring
+  composed type to paper.
 
-  The model proposes tool calls. The runtime enforces stash gating, typed argument decoding,
-  semantic validation, execution boundaries, and structured error reporting. We support undo
-  and compensation where tools declare rollback capability.
+  Workflows are tracked as trails, tool execution attempts are tracked as crumbs, and tool
+  availability is scoped by stashes. The model proposes tool calls. The runtime enforces
+  stash gating, typed argument decoding, semantic validation, execution boundaries, and
+  structured error reporting. We support undo and compensation where tools declare rollback
+  capability.
 
 problem: |
   Agent loops often mix planning, authorization, execution, and history in one opaque control
@@ -32,8 +35,9 @@ what_this_does: |
 
 why_we_build_this: |
   We need coding agents that can run tools on real systems without losing control of safety,
-  traceability, and recoverability. The crumbs model gives us the right primitives for this
-  runtime design.
+  traceability, and recoverability. Cobbler owns the workflow. Crumbs owns the storage.
+  Press owns the execution. The crumbs model gives us the right primitives for this runtime
+  design.
 
   1. Trail as workflow boundary.
   2. Crumb as invocation ledger item.

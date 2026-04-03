@@ -1,5 +1,5 @@
-id: coding-agent
-title: Specifications
+id: press
+title: Press Specifications
 
 overview: |
   We build an agent runtime where workflows are tracked as trails, tool execution attempts

@@ -2,8 +2,8 @@
 # See docs/ARCHITECTURE.yaml for field descriptions.
 
 project:
-    module_path: github.com/petar-djukic/coding-agent
-    binary_name: coding-agent
+    module_path: github.com/petar-djukic/press
+    binary_name: press
     binary_dir: bin
     main_package: ""
     go_source_dirs: []
@@ -73,7 +73,7 @@ claude:
     max_time_sec: 300
     temperature: 0
 
-# --- Agent runtime configuration (coding-agent library) ---
+# --- Press agent runtime configuration ---
 
 agent:
     # System prompt: path to YAML file with prompt template, or inline string.
